@@ -173,7 +173,7 @@ class Model(SpatialEntity):
       submodel_path = submodel_uri.replace('model://', models_path) + os.path.sep + 'model.sdf'
       submodel_name = get_tag(include_node, 'name')
       submodel_pose = get_tag_pose(include_node)
-      #TODO self.submodels.append(Model(self, name=submodel_name, pose=submodel_pose, file=submodel_path))
+      self.submodels.append(Model(self, name=submodel_name, pose=submodel_pose, file=submodel_path))
 
 
 
