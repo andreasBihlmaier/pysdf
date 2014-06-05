@@ -357,7 +357,7 @@ class Inertial(object):
       return
     self.pose = get_tag_pose(node)
     self.mass = get_tag(node, 'mass', 0)
-    self.inertia = Inertia(tree=get_tag(node, 'inertia'))
+    self.inertia = Inertia(tree=get_node(node, 'inertia'))
 
 
 
@@ -384,7 +384,7 @@ class Inertia(object):
       print('Invalid node of type %s instead of inertia. Aborting.' % node.tag)
       return
     for coord in 'ixx', 'ixy', 'ixz', 'iyy', 'iyz', 'izz':
-      self[coord] = get_tag(node, coord, 0)
+      setattr(self, coord, get_tag(node, coord, 0))
 
 
 
