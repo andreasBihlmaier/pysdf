@@ -180,6 +180,14 @@ class Model(SpatialEntity):
     modelnode = get_node(root, 'model')
     self.from_tree(modelnode, **kwargs)
 
+    # Override name (e.g. for <include>)
+    kwargs_name = kwargs.get('name')
+    if kwargs_name:
+      self.name = kwargs_name
+
+    # External pose offset (from <include>)
+    self.pose = numpy.dot(kwargs.get('pose', identity_matrix()), self.pose)
+
 
   def from_tree(self, node, **kwargs):
     if node == None:
@@ -347,7 +355,7 @@ class Inertial(object):
     if node.tag != 'inertial':
       print('Invalid node of type %s instead of inertial. Aborting.' % node.tag)
       return
-    self.pose = get_tag(node, 'pose', identity_matrix())
+    self.pose = get_tag_pose(node)
     self.mass = get_tag(node, 'mass', 0)
     self.inertia = Inertia(tree=get_tag(node, 'inertia'))
 
