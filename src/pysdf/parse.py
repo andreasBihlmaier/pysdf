@@ -93,6 +93,9 @@ class SDF(object):
       print('Not a SDF file. Aborting.')
       return
     self.version = float(root.attrib['version'])
+    if self.version != 1.4:
+      print('Unsupported SDF version in %s. Aborting.\n' % filename)
+      return
     self.world.from_tree(root)
 
 
@@ -126,22 +129,25 @@ class SpatialEntity(object):
     ))
 
 
-  def from_tree(self, node):
+  def from_tree(self, node, **kwargs):
     if node == None:
       return
     self.name = node.attrib['name']
-    self.pose = get_tag_pose(node)
+    self.pose = numpy.dot(kwargs.get('pose', identity_matrix()), get_tag_pose(node))
 
 
 
 class Model(SpatialEntity):
-  def __init__(self, **kwargs):
+  def __init__(self, parent_model = None, **kwargs):
     super(Model, self).__init__(**kwargs)
+    self.parent_model = parent_model
     self.submodels = []
     self.links = []
     self.joints = []
     if 'tree' in kwargs:
-      self.from_tree(kwargs['tree'])
+      self.from_tree(kwargs['tree'], **kwargs)
+    elif 'file' in kwargs:
+      self.from_file(kwargs['file'], **kwargs)
 
 
   def __repr__(self):
@@ -154,17 +160,34 @@ class Model(SpatialEntity):
       '  joints:\n',
       '    %s' % '\n    '.join([indent(str(j), 4) for j in self.joints]),
       '\n',
+      '  submodels:\n',
+      '    %s' % '\n    '.join([indent(str(m), 4) for m in self.submodels]),
+      '\n',
       ')'
     ))
 
 
-  def from_tree(self, node):
+  def from_file(self, filename, **kwargs):
+    tree = ET.parse(filename)
+    root = tree.getroot()
+    if root.tag != 'sdf':
+      print('Not a SDF file. Aborting.')
+      return
+    version = float(root.attrib['version'])
+    if version != 1.4:
+      print('Unsupported SDF version in %s. Aborting.\n' % filename)
+      return
+    modelnode = get_node(root, 'model')
+    self.from_tree(modelnode, **kwargs)
+
+
+  def from_tree(self, node, **kwargs):
     if node == None:
       return
     if node.tag != 'model':
       print('Invalid node of type %s instead of model. Aborting.' % node.tag)
       return
-    super(Model, self).from_tree(node)
+    super(Model, self).from_tree(node, **kwargs)
     self.links = [Link(self, tree=link_node) for link_node in node.iter('link')]
     self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
 
