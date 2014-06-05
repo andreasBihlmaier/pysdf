@@ -46,6 +46,7 @@ def get_tag(node, tagname, default = None):
   else:
     return default
 
+
 def get_node(node, tagname, default = None):
   tag = node.findall(tagname)
   if tag:
@@ -118,15 +119,15 @@ class World(object):
   def from_tree(self, node):
     if node.findall('world'):
       node = node.findall('world')[0]
+      for include_node in node.iter('include'):
+        self.models.append(model_from_include(None, include_node))
       # TODO lights
-    self.models = [Model(tree=model_node) for model_node in node.findall('model')]
-    for include_node in node.iter('include'):
-      self.models.append(model_from_include(None, include_node))
+    self.models += [Model(tree=model_node) for model_node in node.findall('model')]
 
 
   def plot_to_file(self, plot_filename):
     import pygraphviz as pgv
-    graph = pgv.AGraph()
+    graph = pgv.AGraph(directed=True)
     self.plot(graph)
     graph.draw(plot_filename, prog='dot')
 
@@ -136,7 +137,7 @@ class World(object):
 
     for model in self.models:
       model.plot(graph)
-      graph.add_edge('world', model.name)
+      graph.add_edge('world', model.name + '::' + model.root_link.name)
 
 
 
@@ -282,8 +283,18 @@ class Model(SpatialEntity):
       return self.parent_model.get_parent(requested_linkname, self.name)
 
 
-  def plot(self, graph):
-    pass
+  def plot(self, graph, prefix = ''):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    full_prefix += '::'
+    for link in self.links:
+      graph.add_node(full_prefix + link.name)
+    subgraph = graph.add_subgraph([full_prefix + link.name for link in self.links], 'cluster_' + self.name, color='gray', label=self.name)
+
+    for submodel in self.submodels:
+      submodel.plot(graph, full_prefix.rstrip('::'))
+
+    for joint in self.joints:
+      graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child)
 
 
 
