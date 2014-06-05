@@ -8,6 +8,7 @@ import numbers
 
 from tf.transformations import *
 
+models_path = os.path.expanduser('~/.gazebo/models/')
 
 def prettyXML(uglyXML):
   return xml.dom.minidom.parseString(uglyXML).toprettyxml(indent='  ')
@@ -113,9 +114,9 @@ class World(object):
 
 
 class SpatialEntity(object):
-  def __init__(self):
-    self.name = ''
-    self.pose = identity_matrix()
+  def __init__(self, **kwargs):
+    self.name = kwargs.get('name', '')
+    self.pose = kwargs.get('pose', identity_matrix())
 
 
   def __repr__(self):
@@ -135,7 +136,7 @@ class SpatialEntity(object):
 
 class Model(SpatialEntity):
   def __init__(self, **kwargs):
-    super(Model, self).__init__()
+    super(Model, self).__init__(**kwargs)
     self.submodels = []
     self.links = []
     self.joints = []
@@ -167,6 +168,13 @@ class Model(SpatialEntity):
     self.links = [Link(self, tree=link_node) for link_node in node.iter('link')]
     self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
 
+    for include_node in node.iter('include'):
+      submodel_uri = get_tag(include_node, 'uri')
+      submodel_path = submodel_uri.replace('model://', models_path) + os.path.sep + 'model.sdf'
+      submodel_name = get_tag(include_node, 'name')
+      submodel_pose = get_tag_pose(include_node)
+      #TODO self.submodels.append(Model(self, name=submodel_name, pose=submodel_pose, file=submodel_path))
+
 
 
   def to_urdf(self):
@@ -184,7 +192,7 @@ class Model(SpatialEntity):
 
 class Link(SpatialEntity):
   def __init__(self, parent_model, **kwargs):
-    super(Link, self).__init__()
+    super(Link, self).__init__(**kwargs)
     self.parent_model = parent_model
     self.gravity = True
     self.inertial = Inertial()
@@ -220,8 +228,9 @@ class Link(SpatialEntity):
 
 class Joint(SpatialEntity):
   def __init__(self, parent_model, **kwargs):
-    super(Joint, self).__init__()
+    super(Joint, self).__init__(**kwargs)
     self.parent_model = parent_model
+    self.type = ''
     self.parent = ''
     self.child = ''
     self.axis = Axis()
@@ -233,6 +242,7 @@ class Joint(SpatialEntity):
     return ''.join((
       'Joint(\n',
       '  %s\n' % indent(super(Joint, self).__repr__(), 2),
+      '  type: %s\n' % self.type,
       '  parent: %s\n' % self.parent,
       '  child: %s\n' % self.child,
       '  axis: %s\n' % self.axis,
@@ -247,7 +257,10 @@ class Joint(SpatialEntity):
       print('Invalid node of type %s instead of joint. Aborting.' % node.tag)
       return
     super(Joint, self).from_tree(node)
+    self.type = node.attrib['type']
     #TODO self.pose = numpy.dot(self.child.pose, self.pose)
+    self.parent = get_tag(node, 'parent', '')
+    self.child = get_tag(node, 'child', '')
     self.axis = Axis(tree=get_node(node, 'axis'))
 
 
@@ -346,7 +359,7 @@ class Inertia(object):
 
 class LinkPart(SpatialEntity):
   def __init__(self, **kwargs):
-    super(LinkPart, self).__init__()
+    super(LinkPart, self).__init__(**kwargs)
     self.geometry_type = None
     self.geometry_data = {}
     if 'tree' in kwargs:
@@ -378,7 +391,7 @@ class LinkPart(SpatialEntity):
 
 
   def __repr__(self):
-    return 'geometry_type: %s, geometry_data: %s' % (self.geometry_type, self.geometry_data)
+    return '%s geometry_type: %s, geometry_data: %s' % (super(LinkPart, self).__repr__().replace('\n', ', ').strip(), self.geometry_type, self.geometry_data)
 
 
 
