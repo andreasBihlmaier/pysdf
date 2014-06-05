@@ -38,10 +38,17 @@ def homogeneous2tq_string_rounded(homogeneous):
   return 't=%s q=%s' % tuple(rounded(o) for o in homogeneous2translation_quaternion(homogeneous))
 
 
-def get_tag(node, tagname, default):
+def get_tag(node, tagname, default = None):
   tag = node.findall(tagname)
   if tag:
     return tag[0].text
+  else:
+    return default
+
+def get_node(node, tagname, default = None):
+  tag = node.findall(tagname)
+  if tag:
+    return tag[0]
   else:
     return default
 
@@ -61,6 +68,10 @@ def pose_string2homogeneous(pose):
 def get_tag_pose(node):
   pose = get_tag(node, 'pose', '0 0 0  0 0 0')
   return pose_string2homogeneous(pose)
+
+
+def indent(string, spaces):
+  return string.replace('\n', '\n' + ' ' * spaces).strip()
 
 
 
@@ -115,6 +126,8 @@ class SpatialEntity(object):
 
 
   def from_tree(self, node):
+    if node == None:
+      return
     self.name = node.attrib['name']
     self.pose = get_tag_pose(node)
 
@@ -131,20 +144,23 @@ class Model(SpatialEntity):
 
 
   def __repr__(self):
+    print([indent(str(l), 4) for l in self.links])
     return ''.join((
       'Model(\n', 
-      '  %s\n' % super(Model, self).__repr__().replace('\n', '\n  ').strip(),
+      '  %s\n' % indent(super(Model, self).__repr__(), 2),
       '  links:\n',
-      '    %s' % '\n    '.join([str(l).replace('\n', '\n    ').strip() for l in self.links]),
+      '    %s' % '\n    '.join([indent(str(l), 4) for l in self.links]),
       '\n',
       '  joints:\n',
-      '    %s' % '\n    '.join([str(j).replace('\n', '\n    ').strip() for j in self.joints]),
+      '    %s' % '\n    '.join([indent(str(j), 4) for j in self.joints]),
       '\n',
       ')'
     ))
 
 
   def from_tree(self, node):
+    if node == None:
+      return
     if node.tag != 'model':
       print('Invalid node of type %s instead of model. Aborting.' % node.tag)
       return
@@ -172,6 +188,7 @@ class Link(SpatialEntity):
     super(Link, self).__init__()
     self.parent_model = parent_model
     self.gravity = True
+    self.inertial = Inertial()
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -179,17 +196,20 @@ class Link(SpatialEntity):
   def __repr__(self):
     return ''.join((
       'Link(\n',
-      '  %s\n' % super(Link, self).__repr__().replace('\n', '\n  ').strip(),
+      '  %s\n' % indent(super(Link, self).__repr__(), 2),
+      '  %s\n' % indent(str(self.inertial), 2),
       ')'
     ))
 
 
   def from_tree(self, node):
+    if node == None:
+      return
     if node.tag != 'link':
       print('Invalid node of type %s instead of link. Aborting.' % node.tag)
       return
     super(Link, self).from_tree(node)
-    #TODO-next
+    self.inertial = Inertial(tree=get_node(node, 'inertial'))
 
 
 
@@ -207,7 +227,9 @@ class Joint(SpatialEntity):
   def __repr__(self):
     return ''.join((
       'Joint(\n',
-      '  %s\n' % super(Joint, self).__repr__().replace('\n', '\n  ').strip(),
+      '  %s\n' % indent(super(Joint, self).__repr__(), 2),
+      '  parent: %s\n' % self.parent,
+      '  child: %s\n' % self.child,
       ')'
     ))
 
@@ -225,3 +247,108 @@ class Joint(SpatialEntity):
 class Axis(object):
   def __init__(self):
     self.xyz = numpy.array([0, 0, 0])
+
+
+
+class Inertial(object):
+  def __init__(self, **kwargs):
+    self.pose = identity_matrix()
+    self.mass = 0
+    self.inertia = Inertia()
+    self.collision = Collision()
+    self.visual = Visual()
+    if 'tree' in kwargs:
+      self.from_tree(kwargs['tree'])
+
+
+  def __repr__(self):
+    return ''.join((
+      'Inertial(\n',
+      '  pose: %s\n' % homogeneous2tq_string_rounded(self.pose),
+      '  mass: %s\n' % self.mass,
+      '  inertia: %s\n' % self.inertia,
+      '  collision: %s\n' % self.collision,
+      '  visual: %s\n' % self.visual,
+      ')'
+    ))
+
+
+  def from_tree(self, node):
+    if node == None:
+      return
+    if node.tag != 'inertial':
+      print('Invalid node of type %s instead of inertial. Aborting.' % node.tag)
+      return
+    self.pose = get_tag(node, 'pose', identity_matrix())
+    self.mass = get_tag(node, 'mass', 0)
+    self.inertia = Inertia(tree=get_tag(node, 'inertia'))
+    self.collision = Collision(tree=get_tag(node, 'collision'))
+    self.visual = Visual(tree=get_tag(node, 'visual'))
+
+
+class Inertia(object):
+  def __init__(self, **kwargs):
+    self.ixx = 0
+    self.ixy = 0
+    self.ixz = 0
+    self.iyy = 0
+    self.iyz = 0
+    self.izz = 0
+    if 'tree' in kwargs:
+      self.from_tree(kwargs['tree'])
+
+
+  def __repr__(self):
+    return 'Inertia(ixx=%s, ixy=%s, ixz=%s, iyy=%s, iyz=%s, izz=%s)' % (self.ixx, self.ixy, self.ixz, self.iyy, self.iyz, self.izz)
+
+
+  def from_tree(self, node):
+    if node == None:
+      return
+    if node.tag != 'inertia':
+      print('Invalid node of type %s instead of inertia. Aborting.' % node.tag)
+      return
+    for coord in 'ixx', 'ixy', 'ixz', 'iyy', 'iyz', 'izz':
+      self[coord] = get_tag(node, coord, 0)
+
+
+
+class LinkPart(SpatialEntity):
+  def __init__(self, **kwargs):
+    super(LinkPart, self).__init__()
+    self.geometry = None
+    if 'tree' in kwargs:
+      self.from_tree(kwargs['tree'])
+
+
+  def from_tree(self, node):
+    if node == None:
+      return
+    if node.tag != 'visual' and node.tag != 'collision':
+      print('Invalid node of type %s instead of visual or collision. Aborting.' % node.tag)
+      return
+    super(LinkPart, self).from_tree(node)
+
+
+  def __repr__(self):
+    return 'geometry: %s' % self.geometry
+
+
+
+class Collision(LinkPart):
+  def __init__(self, **kwargs):
+    super(Collision, self).__init__(**kwargs)
+
+
+  def __repr__(self):
+    return 'Collision(%s)' % super(Collision, self).__repr__()
+
+
+
+class Visual(LinkPart):
+  def __init__(self, **kwargs):
+    super(Visual, self).__init__(**kwargs)
+
+
+  def __repr__(self):
+    return 'Visual(%s)' % super(Visual, self).__repr__()
