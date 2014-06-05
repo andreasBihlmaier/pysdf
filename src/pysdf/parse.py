@@ -75,6 +75,14 @@ def indent(string, spaces):
   return string.replace('\n', '\n' + ' ' * spaces).strip()
 
 
+def model_from_include(parent, include_node):
+    submodel_uri = get_tag(include_node, 'uri')
+    submodel_path = submodel_uri.replace('model://', models_path) + os.path.sep + 'model.sdf'
+    submodel_name = get_tag(include_node, 'name')
+    submodel_pose = get_tag_pose(include_node)
+    return Model(parent, name=submodel_name, pose=submodel_pose, file=submodel_path)
+
+
 
 
 
@@ -112,7 +120,23 @@ class World(object):
       node = node.findall('world')[0]
       # TODO lights
     self.models = [Model(tree=model_node) for model_node in node.findall('model')]
+    for include_node in node.iter('include'):
+      self.models.append(model_from_include(None, include_node))
 
+
+  def plot_to_file(self, plot_filename):
+    import pygraphviz as pgv
+    graph = pgv.AGraph()
+    self.plot(graph)
+    graph.draw(plot_filename, prog='dot')
+
+
+  def plot(self, graph):
+    graph.add_node('world')
+
+    for model in self.models:
+      model.plot(graph)
+      graph.add_edge('world', model.name)
 
 
 
@@ -203,11 +227,7 @@ class Model(SpatialEntity):
     self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
 
     for include_node in node.iter('include'):
-      submodel_uri = get_tag(include_node, 'uri')
-      submodel_path = submodel_uri.replace('model://', models_path) + os.path.sep + 'model.sdf'
-      submodel_name = get_tag(include_node, 'name')
-      submodel_pose = get_tag_pose(include_node)
-      self.submodels.append(Model(self, name=submodel_name, pose=submodel_pose, file=submodel_path))
+      self.submodels.append(model_from_include(self, include_node))
 
 
   def to_urdf(self):
@@ -235,7 +255,6 @@ class Model(SpatialEntity):
 
   def get_link(self, requested_linkname, prefix = ''):
     full_prefix = prefix + '::' if prefix else ''
-    print('r=%s fp=%s' % (requested_linkname, full_prefix))
     for link in self.links:
       if full_prefix + link.name == requested_linkname:
         return link
@@ -261,6 +280,10 @@ class Model(SpatialEntity):
         return self.get_link(joint.parent)
     if self.parent_model:
       return self.parent_model.get_parent(requested_linkname, self.name)
+
+
+  def plot(self, graph):
+    pass
 
 
 

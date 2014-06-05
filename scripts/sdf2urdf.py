@@ -21,6 +21,7 @@ def main():
   model = world.models[0]
   print(model)
   #model.save_urdf(args.urdf)
+  world.plot_to_file('/tmp/sdf2urdf.png')
 
 
 if __name__ == '__main__':
