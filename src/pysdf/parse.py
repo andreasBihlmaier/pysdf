@@ -144,7 +144,6 @@ class Model(SpatialEntity):
 
 
   def __repr__(self):
-    print([indent(str(l), 4) for l in self.links])
     return ''.join((
       'Model(\n', 
       '  %s\n' % indent(super(Model, self).__repr__(), 2),
@@ -189,6 +188,8 @@ class Link(SpatialEntity):
     self.parent_model = parent_model
     self.gravity = True
     self.inertial = Inertial()
+    self.collision = Collision()
+    self.visual = Visual()
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -198,6 +199,8 @@ class Link(SpatialEntity):
       'Link(\n',
       '  %s\n' % indent(super(Link, self).__repr__(), 2),
       '  %s\n' % indent(str(self.inertial), 2),
+      '  collision: %s\n' % self.collision,
+      '  visual: %s\n' % self.visual,
       ')'
     ))
 
@@ -210,6 +213,8 @@ class Link(SpatialEntity):
       return
     super(Link, self).from_tree(node)
     self.inertial = Inertial(tree=get_node(node, 'inertial'))
+    self.collision = Collision(tree=get_node(node, 'collision'))
+    self.visual = Visual(tree=get_node(node, 'visual'))
 
 
 
@@ -255,8 +260,6 @@ class Inertial(object):
     self.pose = identity_matrix()
     self.mass = 0
     self.inertia = Inertia()
-    self.collision = Collision()
-    self.visual = Visual()
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -267,8 +270,6 @@ class Inertial(object):
       '  pose: %s\n' % homogeneous2tq_string_rounded(self.pose),
       '  mass: %s\n' % self.mass,
       '  inertia: %s\n' % self.inertia,
-      '  collision: %s\n' % self.collision,
-      '  visual: %s\n' % self.visual,
       ')'
     ))
 
@@ -282,8 +283,6 @@ class Inertial(object):
     self.pose = get_tag(node, 'pose', identity_matrix())
     self.mass = get_tag(node, 'mass', 0)
     self.inertia = Inertia(tree=get_tag(node, 'inertia'))
-    self.collision = Collision(tree=get_tag(node, 'collision'))
-    self.visual = Visual(tree=get_tag(node, 'visual'))
 
 
 class Inertia(object):
@@ -316,7 +315,8 @@ class Inertia(object):
 class LinkPart(SpatialEntity):
   def __init__(self, **kwargs):
     super(LinkPart, self).__init__()
-    self.geometry = None
+    self.geometry_type = None
+    self.geometry_data = {}
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -328,10 +328,25 @@ class LinkPart(SpatialEntity):
       print('Invalid node of type %s instead of visual or collision. Aborting.' % node.tag)
       return
     super(LinkPart, self).from_tree(node)
+    gnode = get_node(node, 'geometry')
+    if gnode == None:
+      return
+    for gtype in 'box', 'cylinder', 'sphere', 'mesh':
+      typenode = get_node(gnode, gtype)
+      if typenode != None:
+        self.geometry_type = gtype
+        if gtype == 'box':
+          self.geometry_data = {'size': get_tag(typenode, 'size')}
+        elif gtype == 'cylinder':
+          self.geometry_data = {'radius': get_tag(typenode, 'radius'), 'length': get_tag(typenode, 'length')}
+        elif gtype == 'sphere':
+          self.geometry_data = {'radius': get_tag(typenode, 'radius')}
+        elif gtype == 'mesh':
+          self.geometry_data = {'uri': get_tag(typenode, 'uri'), 'scale': get_tag(typenode, 'scale')}
 
 
   def __repr__(self):
-    return 'geometry: %s' % self.geometry
+    return 'geometry_type: %s, geometry_data: %s' % (self.geometry_type, self.geometry_data)
 
 
 
