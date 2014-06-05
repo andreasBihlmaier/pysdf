@@ -235,23 +235,54 @@ class Joint(SpatialEntity):
       '  %s\n' % indent(super(Joint, self).__repr__(), 2),
       '  parent: %s\n' % self.parent,
       '  child: %s\n' % self.child,
+      '  axis: %s\n' % self.axis,
       ')'
     ))
 
 
   def from_tree(self, node):
+    if node == None:
+      return
     if node.tag != 'joint':
       print('Invalid node of type %s instead of joint. Aborting.' % node.tag)
       return
     super(Joint, self).from_tree(node)
     #TODO self.pose = numpy.dot(self.child.pose, self.pose)
-    # TODO
+    self.axis = Axis(tree=get_node(node, 'axis'))
 
 
 
 class Axis(object):
-  def __init__(self):
+  def __init__(self, **kwargs):
     self.xyz = numpy.array([0, 0, 0])
+    self.lower_limit = 0
+    self.upper_limit = 0
+    self.effort_limit = 0
+    self.velocity_limit = 0
+    if 'tree' in kwargs:
+      self.from_tree(kwargs['tree'])
+
+
+  def __repr__(self):
+    return 'Axis(xyz=%s, lower_limit=%s, upper_limit=%s, effort=%s, velocity=%s)' % (self.xyz, self.lower_limit, self.upper_limit, self.effort_limit, self.velocity_limit)
+
+
+  def from_tree(self, node):
+    if node == None:
+      return
+    if node.tag != 'axis':
+      print('Invalid node of type %s instead of axis. Aborting.' % node.tag)
+      return
+    self.xyz = numpy.array(get_tag(node, 'xyz'))
+    limitnode = get_node(node, 'limit')
+    if limitnode == None:
+      print('limit Tag missing from joint. Aborting.')
+      return
+    self.lower_limit = float(get_tag(limitnode, 'lower', 0))
+    self.upper_limit = float(get_tag(limitnode, 'upper', 0))
+    self.effort_limit = float(get_tag(limitnode, 'effort', 0))
+    self.velocity_limit = float(get_tag(limitnode, 'velocity', 0))
+
 
 
 
@@ -283,6 +314,7 @@ class Inertial(object):
     self.pose = get_tag(node, 'pose', identity_matrix())
     self.mass = get_tag(node, 'mass', 0)
     self.inertia = Inertia(tree=get_tag(node, 'inertia'))
+
 
 
 class Inertia(object):
