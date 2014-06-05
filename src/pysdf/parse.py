@@ -149,6 +149,8 @@ class Model(SpatialEntity):
     elif 'file' in kwargs:
       self.from_file(kwargs['file'], **kwargs)
 
+    self.root_link = self.find_root_link()
+
 
   def __repr__(self):
     return ''.join((
@@ -207,7 +209,6 @@ class Model(SpatialEntity):
       self.submodels.append(Model(self, name=submodel_name, pose=submodel_pose, file=submodel_path))
 
 
-
   def to_urdf(self):
     # TODO
     return ''
@@ -218,6 +219,34 @@ class Model(SpatialEntity):
     pretty_urdf_string = prettyXML(self.to_urdf())
     urdf_file.write(pretty_urdf_string)
     urdf_file.close()
+
+
+  def get_joint(self, requested_jointname, prefix = ''):
+    full_prefix = prefix + '::' if prefix else ''
+    for joint in self.joints:
+      if full_prefix + joint.name == requested_jointname:
+        return joint
+    for submodel in self.submodels:
+      res = submodel.get_joint(requested_jointname, submodel.name)
+      if res:
+        return res
+
+
+  def get_link(self, requested_linkname, prefix = ''):
+    full_prefix = prefix + '::' if prefix else ''
+    print('r=%s fp=%s' % (requested_linkname, full_prefix))
+    for link in self.links:
+      if full_prefix + link.name == requested_linkname:
+        return link
+    for submodel in self.submodels:
+      res = submodel.get_link(requested_linkname, self.name + '::' + submodel.name)
+      if res:
+        return res
+
+
+  def find_root_link(self):
+    pass
+    #TODO
 
 
 
