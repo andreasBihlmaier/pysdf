@@ -156,6 +156,7 @@ class Model(SpatialEntity):
     return ''.join((
       'Model(\n', 
       '  %s\n' % indent(super(Model, self).__repr__(), 2),
+      '  root_link: %s\n' % self.root_link.name,
       '  links:\n',
       '    %s' % '\n    '.join([indent(str(l), 4) for l in self.links]),
       '\n',
@@ -245,8 +246,21 @@ class Model(SpatialEntity):
 
 
   def find_root_link(self):
-    pass
-    #TODO
+    curr_link = self.links[0]
+    while True:
+      parent_link = self.get_parent(curr_link.name)
+      if not parent_link:
+        return curr_link
+      curr_link = parent_link
+
+
+  def get_parent(self, requested_linkname, prefix = ''):
+    full_prefix = prefix + '::' if prefix else ''
+    for joint in self.joints:
+      if joint.child == full_prefix + requested_linkname:
+        return self.get_link(joint.parent)
+    if self.parent_model:
+      return self.parent_model.get_parent(requested_linkname, self.name)
 
 
 
