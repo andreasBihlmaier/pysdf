@@ -249,15 +249,16 @@ class Model(SpatialEntity):
       self.submodels.append(model_from_include(self, include_node))
 
 
+  def add_urdf_subtree(self, node, link, prefix = '', pose_offset = identity_matrix()):
+    abs_pose_offset = concatenate_matrices(pose_offset, self.pose)
+    link.add_urdf_elements(node, prefix, abs_pose_offset)
+    for joint in self.get_child_joints(link):
+      joint.add_urdf_elements(node, prefix, abs_pose_offset)
+      #add_urdf_subtree(node, self.get_link(joint.child), TODO
+
+
   def add_urdf_elements(self, node, prefix = '', pose_offset = identity_matrix()):
-    full_prefix = prefix + '::' + self.name if prefix else self.name
-    child_offset = concatenate_matrices(pose_offset, self.pose)
-    for link in self.links:
-      link.add_urdf_elements(node, full_prefix, child_offset)
-    for joint in self.joints:
-      joint.add_urdf_elements(node, full_prefix, child_offset)
-    for submodel in self.submodels:
-      submodel.add_urdf_elements(node, full_prefix, child_offset)
+    self.add_urdf_subtree(node, self.root_link, self.name)
 
 
   def to_urdf_string(self):
@@ -364,11 +365,9 @@ class Link(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix, pose_offset):
-    full_prefix = prefix + '::' + self.name if prefix else self.name
-    full_prefix += '::'
+    full_prefix = prefix + '::' if prefix else ''
     linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
-    abs_pose = concatenate_matrices(pose_offset, self.pose)
-    pose2origin(linknode, abs_pose)
+    #pose2origin(linknode
 
 
 
@@ -411,8 +410,7 @@ class Joint(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix, pose_offset):
-    full_prefix = prefix + '::' + self.name if prefix else self.name
-    full_prefix += '::'
+    full_prefix = prefix + '::' if prefix else ''
     jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
     if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
       jointnode.attrib['type'] = 'fixed'
@@ -420,7 +418,7 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = self.type
     parentnode = ET.SubElement(jointnode, 'parent', {'link': self.parent})
     childnode = ET.SubElement(jointnode, 'child', {'link': self.child})
-    #pose2origin(node, self.pose)
+    #pose2origin(jointnode
 
 
 
