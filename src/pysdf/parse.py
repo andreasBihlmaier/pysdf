@@ -100,7 +100,7 @@ def model_from_include(parent, include_node):
 
 def pose2origin(node, pose):
   xyz, rpy = homogeneous2translation_rpy(pose)
-  ET.SubElement(node, 'origin', {'rpy': array2string(rounded(rpy)), 'xyz': array2string(rounded(xyz))})
+  ET.SubElement(node, 'origin', {'xyz': array2string(rounded(xyz)), 'rpy': array2string(rounded(rpy))})
 
 
 
@@ -255,18 +255,12 @@ class Model(SpatialEntity):
       self.submodels.append(model_from_include(self, include_node))
 
 
-  def add_urdf_subtree(self, node, link, prefix = '', worldMVparent = identity_matrix()):
-    worldMVmodel = concatenate_matrices(worldMVparent, self.pose)
-    #worldMVlink = concatenate_matrices(worldMVmodel, link.pose)
-    #jointMVlink = concatenate_matrices(inverse_matrix(
-    #link.add_urdf_elements(node, prefix, TODO)
-    #for joint in link.tree_child_joints:
-    #  joint.add_urdf_elements(node, prefix, TODO)
-    #  #self.add_urdf_subtree(node, self.get_link(joint.child), TODO
-
-
-  def add_urdf_elements(self, node, prefix = '', pose_offset = identity_matrix()):
-    self.add_urdf_subtree(node, self.root_link, self.name)
+  def add_urdf_elements(self, node, prefix = ''):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    for entity in self.joints + self.links:
+      entity.add_urdf_elements(node, full_prefix)
+    for submodel in self.submodels:
+      submodel.add_urdf_elements(node, full_prefix)
 
 
   def to_urdf_string(self):
@@ -319,8 +313,10 @@ class Model(SpatialEntity):
   def calculate_absolute_pose(self, worldMVparent = identity_matrix()):
     worldMVmodel = concatenate_matrices(worldMVparent, self.pose)
     self.pose_world = worldMVmodel
-    for entity in self.joints + self.links:
-      entity.pose_world = concatenate_matrices(worldMVmodel, entity.pose)
+    for link in self.links:
+      link.pose_world = concatenate_matrices(worldMVmodel, link.pose)
+    for joint in self.joints:
+      joint.pose_world = concatenate_matrices(worldMVmodel, joint.tree_child_link.pose, joint.pose)
     for submodel in self.submodels:
       submodel.calculate_absolute_pose(worldMVmodel)
 
@@ -335,15 +331,13 @@ class Model(SpatialEntity):
 
 
   def get_parent(self, requested_linkname, prefix = '', visited = []):
-    """
-    Parent joints can also be in submodels
-    """
     if self.name in visited:
       return None
     full_prefix = prefix + '::' if prefix else ''
     for joint in self.joints:
       if joint.child == full_prefix + requested_linkname:
         return self.get_link(joint.parent)
+    # Parent links can also be in submodels
     for submodel in self.submodels:
       res = submodel.get_parent(requested_linkname, full_prefix + submodel.name, visited + [self.name])
       if res:
@@ -363,7 +357,7 @@ class Model(SpatialEntity):
       submodel.plot(graph, full_prefix.rstrip('::'))
 
     for joint in self.joints:
-      graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child, label=joint.name + '\\nrel: ' + homogeneous2tq_string_rounded(joint.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(joint.pose_world))
+      graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child, label=full_prefix + joint.name + '\\nrel: ' + homogeneous2tq_string_rounded(joint.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(joint.pose_world))
 
 
 
@@ -404,10 +398,16 @@ class Link(SpatialEntity):
     self.visual = Visual(tree=get_node(node, 'visual'))
 
 
-  def add_urdf_elements(self, node, prefix, pose_offset):
+  def add_urdf_elements(self, node, prefix):
     full_prefix = prefix + '::' if prefix else ''
     linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
-    #pose2origin(linknode
+    if self.tree_parent_joint:
+      if self.tree_parent_joint.parent_model == self.parent_model:
+        pose2origin(linknode, concatenate_matrices(inverse_matrix(self.tree_parent_joint.pose_world), self.pose_world))
+      else: # joint crosses includes
+        pose2origin(linknode, identity_matrix())
+    else: # root
+      pose2origin(linknode, self.pose_world)
 
 
 
@@ -451,16 +451,20 @@ class Joint(SpatialEntity):
     self.axis = Axis(tree=get_node(node, 'axis'))
 
 
-  def add_urdf_elements(self, node, prefix, pose_offset):
+  def add_urdf_elements(self, node, prefix):
     full_prefix = prefix + '::' if prefix else ''
     jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
+    parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
+    childnode = ET.SubElement(jointnode, 'child', {'link': full_prefix + self.child})
+    if self.tree_parent_link.parent_model == self.parent_model:
+      pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.pose_world))
+    else: # joint crosses includes
+      pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.tree_child_link.pose_world))
     if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
-    childnode = ET.SubElement(jointnode, 'child', {'link': full_prefix + self.child})
-    #pose2origin(jointnode
+    self.axis.add_urdf_elements(jointnode)
 
 
 
@@ -496,6 +500,10 @@ class Axis(object):
     self.effort_limit = float(get_tag(limitnode, 'effort', 0))
     self.velocity_limit = float(get_tag(limitnode, 'velocity', 0))
 
+
+  def add_urdf_elements(self, node):
+    axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(self.xyz)})
+    limitnode = ET.SubElement(node, 'limit', {'lower': str(self.lower_limit), 'upper': str(self.upper_limit), 'effort': str(self.effort_limit), 'velocity': str(self.velocity_limit)})
 
 
 
