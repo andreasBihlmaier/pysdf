@@ -10,6 +10,20 @@ from tf.transformations import *
 
 models_path = os.path.expanduser('~/.gazebo/models/')
 
+
+def find_file_in_catkin_ws(filename):
+  catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
+  result = ''
+  for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
+    for currfile in files:
+      filename_path = os.path.join(root, currfile)
+      if filename in filename_path:
+        if result:
+          result += ' OR '
+        result += filename_path.replace(catkin_ws_path, '')
+  return result
+
+
 def prettyXML(uglyXML):
   return xml.dom.minidom.parseString(uglyXML).toprettyxml(indent='  ')
 
@@ -397,17 +411,27 @@ class Link(SpatialEntity):
     self.collision = Collision(tree=get_node(node, 'collision'))
     self.visual = Visual(tree=get_node(node, 'visual'))
 
+  def is_empty(self):
+    return not self.visual.geometry_type and not self.collision.geometry_type
 
   def add_urdf_elements(self, node, prefix):
+    # Skip 'empty' links, i.e. those existing for TF only
+    if self.is_empty():
+      return
+
     full_prefix = prefix + '::' if prefix else ''
     linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
+    # urdf links do not have a coordinate system themselves, only their parts (inertial, collision, visual) have one
     if self.tree_parent_joint:
       if self.tree_parent_joint.parent_model == self.parent_model:
-        pose2origin(linknode, concatenate_matrices(inverse_matrix(self.tree_parent_joint.pose_world), self.pose_world))
+        urdf_pose = concatenate_matrices(inverse_matrix(self.tree_parent_joint.pose_world), self.pose_world)
       else: # joint crosses includes
-        pose2origin(linknode, identity_matrix())
+        urdf_pose = identity_matrix()
     else: # root
-      pose2origin(linknode, self.pose_world)
+      urdf_pose = self.pose_world
+    self.inertial.add_urdf_elements(linknode, urdf_pose)
+    self.collision.add_urdf_elements(linknode, prefix, urdf_pose)
+    self.visual.add_urdf_elements(linknode, prefix, urdf_pose)
 
 
 
@@ -452,6 +476,10 @@ class Joint(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix):
+    # Skip 'empty' links, i.e. those existing for TF only
+    if self.tree_parent_link.is_empty() or self.tree_child_link.is_empty():
+      return
+
     full_prefix = prefix + '::' if prefix else ''
     jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
     parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
@@ -537,6 +565,13 @@ class Inertial(object):
     self.inertia = Inertia(tree=get_node(node, 'inertia'))
 
 
+  def add_urdf_elements(self, node, link_pose):
+    inertialnode = ET.SubElement(node, 'inertial')
+    massnode = ET.SubElement(inertialnode, 'mass', {'value': str(self.mass)})
+    pose2origin(inertialnode, concatenate_matrices(link_pose, self.pose))
+    self.inertia.add_urdf_elements(inertialnode)
+
+
 
 class Inertia(object):
   def __init__(self, **kwargs):
@@ -546,6 +581,7 @@ class Inertia(object):
     self.iyy = 0
     self.iyz = 0
     self.izz = 0
+    self.coords = 'ixx', 'ixy', 'ixz', 'iyy', 'iyz', 'izz'
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -560,8 +596,14 @@ class Inertia(object):
     if node.tag != 'inertia':
       print('Invalid node of type %s instead of inertia. Aborting.' % node.tag)
       return
-    for coord in 'ixx', 'ixy', 'ixz', 'iyy', 'iyz', 'izz':
+    for coord in self.coords:
       setattr(self, coord, get_tag(node, coord, 0))
+
+
+  def add_urdf_elements(self, node):
+    inertianode = ET.SubElement(node, 'inertia')
+    for coord in self.coords:
+      inertianode.attrib[coord] = str(getattr(self, coord))
 
 
 
@@ -570,6 +612,7 @@ class LinkPart(SpatialEntity):
     super(LinkPart, self).__init__(**kwargs)
     self.geometry_type = None
     self.geometry_data = {}
+    self.gtypes = 'box', 'cylinder', 'sphere', 'mesh'
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -584,7 +627,7 @@ class LinkPart(SpatialEntity):
     gnode = get_node(node, 'geometry')
     if gnode == None:
       return
-    for gtype in 'box', 'cylinder', 'sphere', 'mesh':
+    for gtype in self.gtypes:
       typenode = get_node(gnode, gtype)
       if typenode != None:
         self.geometry_type = gtype
@@ -602,6 +645,26 @@ class LinkPart(SpatialEntity):
     return '%s geometry_type: %s, geometry_data: %s' % (super(LinkPart, self).__repr__().replace('\n', ', ').strip(), self.geometry_type, self.geometry_data)
 
 
+  def add_urdf_elements(self, node, prefix, link_pose, part_type):
+    partnode = ET.SubElement(node, part_type, {'name': prefix + '::' + self.name})
+    pose2origin(partnode, concatenate_matrices(link_pose, self.pose))
+    geometrynode = ET.SubElement(partnode, 'geometry')
+    if self.geometry_type == 'box':
+      boxnode = ET.SubElement(geometrynode, 'box', {'size': self.geometry_data['size']})
+    elif self.geometry_type == 'cylinder':
+      cylindernode = ET.SubElement(geometrynode, 'cylinder', {'radius': self.geometry_data['radius'], 'length': self.geometry_data['length']})
+    elif self.geometry_type == 'sphere':
+      spherenode = ET.SubElement(geometrynode, 'sphere', {'radius': self.geometry_data['radius']})
+    elif self.geometry_type == 'mesh':
+      mesh_file = '/'.join(self.geometry_data['uri'].split('/')[3:])
+      mesh_found = find_file_in_catkin_ws(mesh_file)
+      if mesh_found:
+        mesh_path = 'package://' + mesh_found
+      else:
+        mesh_path = 'package://PATHTOMESHES/' + mesh_file
+      meshnode = ET.SubElement(geometrynode, 'mesh', {'filename': mesh_path})
+
+
 
 class Collision(LinkPart):
   def __init__(self, **kwargs):
@@ -612,6 +675,10 @@ class Collision(LinkPart):
     return 'Collision(%s)' % super(Collision, self).__repr__()
 
 
+  def add_urdf_elements(self, node, prefix, link_pose):
+    super(Collision, self).add_urdf_elements(node, prefix, link_pose, 'collision')
+
+
 
 class Visual(LinkPart):
   def __init__(self, **kwargs):
@@ -620,3 +687,7 @@ class Visual(LinkPart):
 
   def __repr__(self):
     return 'Visual(%s)' % super(Visual, self).__repr__()
+
+
+  def add_urdf_elements(self, node, prefix, link_pose):
+    super(Visual, self).add_urdf_elements(node, prefix, link_pose, 'visual')
