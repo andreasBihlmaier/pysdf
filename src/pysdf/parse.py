@@ -24,11 +24,25 @@ def homogeneous2translation_quaternion(homogeneous):
   return translation, quaternion
 
 
+def homogeneous2translation_rpy(homogeneous):
+  """
+  Translation: [x, y, z]
+  RPY: [sx, sy, sz]
+  """
+  translation = translation_from_matrix(homogeneous)
+  rpy = euler_from_matrix(homogeneous)
+  return translation, rpy
+
+
 def rounded(val):
   if isinstance(val, numbers.Number):
     return int(round(val,6) * 1e5) / 1.0e5
   else:
     return numpy.array([rounded(v) for v in val])
+
+
+def array2string(array):
+  return numpy.array_str(array).strip('[]. ').replace('. ', ' ')
 
 
 def homogeneous2tq_string(homogeneous):
@@ -83,6 +97,10 @@ def model_from_include(parent, include_node):
     submodel_pose = get_tag_pose(include_node)
     return Model(parent, name=submodel_name, pose=submodel_pose, file=submodel_path)
 
+
+def pose2origin(node, pose):
+  xyz, rpy = homogeneous2translation_rpy(pose)
+  ET.SubElement(node, 'origin', {'rpy': array2string(rounded(rpy)), 'xyz': array2string(rounded(xyz))})
 
 
 
@@ -231,14 +249,26 @@ class Model(SpatialEntity):
       self.submodels.append(model_from_include(self, include_node))
 
 
-  def to_urdf(self):
-    # TODO
-    return ''
+  def add_urdf_elements(self, node, prefix = '', pose_offset = identity_matrix()):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    child_offset = concatenate_matrices(pose_offset, self.pose)
+    for link in self.links:
+      link.add_urdf_elements(node, full_prefix, child_offset)
+    for joint in self.joints:
+      joint.add_urdf_elements(node, full_prefix, child_offset)
+    for submodel in self.submodels:
+      submodel.add_urdf_elements(node, full_prefix, child_offset)
+
+
+  def to_urdf_string(self):
+    urdfnode = ET.Element('robot', {'name': self.name})
+    self.add_urdf_elements(urdfnode)
+    return ET.tostring(urdfnode)
 
 
   def save_urdf(self, filename):
     urdf_file = open(filename, 'w')
-    pretty_urdf_string = prettyXML(self.to_urdf())
+    pretty_urdf_string = prettyXML(self.to_urdf_string())
     urdf_file.write(pretty_urdf_string)
     urdf_file.close()
 
@@ -333,6 +363,14 @@ class Link(SpatialEntity):
     self.visual = Visual(tree=get_node(node, 'visual'))
 
 
+  def add_urdf_elements(self, node, prefix, pose_offset):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    full_prefix += '::'
+    linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
+    abs_pose = concatenate_matrices(pose_offset, self.pose)
+    pose2origin(linknode, abs_pose)
+
+
 
 class Joint(SpatialEntity):
   def __init__(self, parent_model, **kwargs):
@@ -370,6 +408,20 @@ class Joint(SpatialEntity):
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
     self.axis = Axis(tree=get_node(node, 'axis'))
+
+
+  def add_urdf_elements(self, node, prefix, pose_offset):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    full_prefix += '::'
+    jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
+    if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
+      jointnode.attrib['type'] = 'fixed'
+    else:
+      jointnode.attrib['type'] = self.type
+    parentnode = ET.SubElement(jointnode, 'parent', {'link': self.parent})
+    childnode = ET.SubElement(jointnode, 'child', {'link': self.child})
+    #pose2origin(node, self.pose)
+
 
 
 

@@ -14,14 +14,14 @@ def main():
 
   sdf = pysdf.SDF(file=args.sdf)
   world = sdf.world
+  world.plot_to_file('/tmp/sdf2urdf.png')
   if len(world.models) != 1:
     print('SDF contains %s instead of exactly one model. Aborting.' % len(world.models))
     sys.exit(1)
 
   model = world.models[0]
   print(model)
-  #model.save_urdf(args.urdf)
-  world.plot_to_file('/tmp/sdf2urdf.png')
+  model.save_urdf(args.urdf)
 
 
 if __name__ == '__main__':
