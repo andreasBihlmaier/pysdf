@@ -415,10 +415,6 @@ class Link(SpatialEntity):
     return not self.visual.geometry_type and not self.collision.geometry_type
 
   def add_urdf_elements(self, node, prefix):
-    # Skip 'empty' links, i.e. those existing for TF only
-    if self.is_empty():
-      return
-
     full_prefix = prefix + '::' if prefix else ''
     linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
     # urdf links do not have a coordinate system themselves, only their parts (inertial, collision, visual) have one
@@ -476,10 +472,6 @@ class Joint(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix):
-    # Skip 'empty' links, i.e. those existing for TF only
-    if self.tree_parent_link.is_empty() or self.tree_child_link.is_empty():
-      return
-
     full_prefix = prefix + '::' if prefix else ''
     jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
     parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
@@ -646,6 +638,8 @@ class LinkPart(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix, link_pose, part_type):
+    if not self.geometry_type:
+      return
     partnode = ET.SubElement(node, part_type, {'name': prefix + '::' + self.name})
     pose2origin(partnode, concatenate_matrices(link_pose, self.pose))
     geometrynode = ET.SubElement(partnode, 'geometry')
