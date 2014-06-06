@@ -161,14 +161,16 @@ class World(object):
 
 class SpatialEntity(object):
   def __init__(self, **kwargs):
-    self.name = kwargs.get('name', '')
-    self.pose = kwargs.get('pose', identity_matrix())
+    self.name = ''
+    self.pose = identity_matrix()
+    self.pose_world = identity_matrix()
 
 
   def __repr__(self):
     return ''.join((
       'name: %s\n' % self.name,
       'pose: %s\n' % homogeneous2tq_string_rounded(self.pose),
+      'pose_world: %s\n' % homogeneous2tq_string_rounded(self.pose_world),
     ))
 
 
@@ -176,7 +178,7 @@ class SpatialEntity(object):
     if node == None:
       return
     self.name = node.attrib['name']
-    self.pose = numpy.dot(kwargs.get('pose', identity_matrix()), get_tag_pose(node))
+    self.pose = get_tag_pose(node)
 
 
 
@@ -187,19 +189,23 @@ class Model(SpatialEntity):
     self.submodels = []
     self.links = []
     self.joints = []
+    self.root_link = None
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'], **kwargs)
     elif 'file' in kwargs:
       self.from_file(kwargs['file'], **kwargs)
 
-    self.root_link = self.find_root_link()
+    if not self.parent_model:
+      self.root_link = self.find_root_link()
+      self.build_tree()
+      self.calculate_absolute_pose()
 
 
   def __repr__(self):
     return ''.join((
       'Model(\n', 
       '  %s\n' % indent(super(Model, self).__repr__(), 2),
-      '  root_link: %s\n' % self.root_link.name,
+      '  root_link: %s\n' % self.root_link.name if self.root_link else '',
       '  links:\n',
       '    %s' % '\n    '.join([indent(str(l), 4) for l in self.links]),
       '\n',
@@ -249,12 +255,14 @@ class Model(SpatialEntity):
       self.submodels.append(model_from_include(self, include_node))
 
 
-  def add_urdf_subtree(self, node, link, prefix = '', pose_offset = identity_matrix()):
-    abs_pose_offset = concatenate_matrices(pose_offset, self.pose)
-    link.add_urdf_elements(node, prefix, abs_pose_offset)
-    for joint in self.get_child_joints(link):
-      joint.add_urdf_elements(node, prefix, abs_pose_offset)
-      #add_urdf_subtree(node, self.get_link(joint.child), TODO
+  def add_urdf_subtree(self, node, link, prefix = '', worldMVparent = identity_matrix()):
+    worldMVmodel = concatenate_matrices(worldMVparent, self.pose)
+    #worldMVlink = concatenate_matrices(worldMVmodel, link.pose)
+    #jointMVlink = concatenate_matrices(inverse_matrix(
+    #link.add_urdf_elements(node, prefix, TODO)
+    #for joint in link.tree_child_joints:
+    #  joint.add_urdf_elements(node, prefix, TODO)
+    #  #self.add_urdf_subtree(node, self.get_link(joint.child), TODO
 
 
   def add_urdf_elements(self, node, prefix = '', pose_offset = identity_matrix()):
@@ -275,6 +283,7 @@ class Model(SpatialEntity):
 
 
   def get_joint(self, requested_jointname, prefix = ''):
+    #print('get_joint: n=%s rj=%s p=%s' % (self.name, requested_jointname, prefix))
     full_prefix = prefix + '::' if prefix else ''
     for joint in self.joints:
       if full_prefix + joint.name == requested_jointname:
@@ -286,14 +295,34 @@ class Model(SpatialEntity):
 
 
   def get_link(self, requested_linkname, prefix = ''):
+    #print('get_link: n=%s rl=%s p=%s' % (self.name, requested_linkname, prefix))
     full_prefix = prefix + '::' if prefix else ''
     for link in self.links:
       if full_prefix + link.name == requested_linkname:
         return link
     for submodel in self.submodels:
-      res = submodel.get_link(requested_linkname, self.name + '::' + submodel.name)
+      res = submodel.get_link(requested_linkname, prefix + '::' + submodel.name if prefix else submodel.name)
       if res:
         return res
+
+
+  def build_tree(self):
+    for joint in self.joints:
+      joint.tree_parent_link = self.get_link(joint.parent)
+      joint.tree_child_link = self.get_link(joint.child)
+      joint.tree_parent_link.tree_child_joints.append(joint)
+      joint.tree_child_link.tree_parent_joint = joint
+    for submodel in self.submodels:
+      submodel.build_tree()
+
+
+  def calculate_absolute_pose(self, worldMVparent = identity_matrix()):
+    worldMVmodel = concatenate_matrices(worldMVparent, self.pose)
+    self.pose_world = worldMVmodel
+    for entity in self.joints + self.links:
+      entity.pose_world = concatenate_matrices(worldMVmodel, entity.pose)
+    for submodel in self.submodels:
+      submodel.calculate_absolute_pose(worldMVmodel)
 
 
   def find_root_link(self):
@@ -305,27 +334,36 @@ class Model(SpatialEntity):
       curr_link = parent_link
 
 
-  def get_parent(self, requested_linkname, prefix = ''):
+  def get_parent(self, requested_linkname, prefix = '', visited = []):
+    """
+    Parent joints can also be in submodels
+    """
+    if self.name in visited:
+      return None
     full_prefix = prefix + '::' if prefix else ''
     for joint in self.joints:
       if joint.child == full_prefix + requested_linkname:
         return self.get_link(joint.parent)
+    for submodel in self.submodels:
+      res = submodel.get_parent(requested_linkname, full_prefix + submodel.name, visited + [self.name])
+      if res:
+        return res
     if self.parent_model:
-      return self.parent_model.get_parent(requested_linkname, self.name)
+      return self.parent_model.get_parent(requested_linkname, self.name, visited + [self.name])
 
 
   def plot(self, graph, prefix = ''):
     full_prefix = prefix + '::' + self.name if prefix else self.name
     full_prefix += '::'
     for link in self.links:
-      graph.add_node(full_prefix + link.name)
-    subgraph = graph.add_subgraph([full_prefix + link.name for link in self.links], 'cluster_' + self.name, color='gray', label=self.name)
+      graph.add_node(full_prefix + link.name, label=full_prefix + link.name + '\\nrel: ' + homogeneous2tq_string_rounded(link.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(link.pose_world))
+    subgraph = graph.add_subgraph([full_prefix + link.name for link in self.links], 'cluster_' + self.name, color='gray', label=self.name + '\\nrel: ' + homogeneous2tq_string_rounded(self.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(self.pose_world))
 
     for submodel in self.submodels:
       submodel.plot(graph, full_prefix.rstrip('::'))
 
     for joint in self.joints:
-      graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child)
+      graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child, label=joint.name + '\\nrel: ' + homogeneous2tq_string_rounded(joint.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(joint.pose_world))
 
 
 
@@ -337,6 +375,8 @@ class Link(SpatialEntity):
     self.inertial = Inertial()
     self.collision = Collision()
     self.visual = Visual()
+    self.tree_parent_joint = None
+    self.tree_child_joints = []
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -379,6 +419,8 @@ class Joint(SpatialEntity):
     self.parent = ''
     self.child = ''
     self.axis = Axis()
+    self.tree_parent_link = None
+    self.tree_child_link = None
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
@@ -416,8 +458,8 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    parentnode = ET.SubElement(jointnode, 'parent', {'link': self.parent})
-    childnode = ET.SubElement(jointnode, 'child', {'link': self.child})
+    parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
+    childnode = ET.SubElement(jointnode, 'child', {'link': full_prefix + self.child})
     #pose2origin(jointnode
 
 
