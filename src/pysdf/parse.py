@@ -124,6 +124,11 @@ def homogeneous_times_vector(homogeneous, vector):
   return res[:3,3].T 
 
 
+def rotation_only(homogeneous):
+  euler = euler_from_matrix(homogeneous)
+  return euler_matrix(euler[0], euler[1], euler[2])
+
+
 
 
 
@@ -481,7 +486,6 @@ class Joint(SpatialEntity):
       return
     super(Joint, self).from_tree(node)
     self.type = node.attrib['type']
-    #TODO self.pose = numpy.dot(self.child.pose, self.pose)
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
     self.axis = Axis(tree=get_node(node, 'axis'))
@@ -500,8 +504,7 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    # TODO still wrong
-    self.axis.add_urdf_elements(jointnode, concatenate_matrices(inverse_matrix(self.parent_model.get_root_model().pose_world), self.pose_world))
+    self.axis.add_urdf_elements(jointnode, concatenate_matrices(self.pose_world, inverse_matrix(self.parent_model.pose_world)))
 
 
 
@@ -538,12 +541,13 @@ class Axis(object):
     self.velocity_limit = float(get_tag(limitnode, 'velocity', 0))
 
 
-  def add_urdf_elements(self, node, modelMVjoint):
+  def add_urdf_elements(self, node, modelCBTjoint):
     # SDF 1.4 axis is specified in model frame, but urdf in joint=child frame
-    xyz_joint = homogeneous_times_vector(inverse_matrix(modelMVjoint), self.xyz)
+    rotation_modelCBTjoint = rotation_only(modelCBTjoint)
+    xyz_joint = homogeneous_times_vector(rotation_modelCBTjoint, self.xyz)
     xyz_joint /= numpy.linalg.norm(xyz_joint)
-    #print('self.xyz=%s xyz_joint=%s' % (self.xyz, xyz_joint))
-    axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(xyz_joint)})
+    #print('self.xyz=%s modelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
+    axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(rounded(xyz_joint))})
     limitnode = ET.SubElement(node, 'limit', {'lower': str(self.lower_limit), 'upper': str(self.upper_limit), 'effort': str(self.effort_limit), 'velocity': str(self.velocity_limit)})
 
 
