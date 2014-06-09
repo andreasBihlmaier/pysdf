@@ -11,17 +11,19 @@ from tf.transformations import *
 models_path = os.path.expanduser('~/.gazebo/models/')
 
 
+find_file_in_catkin_ws_cache = []
+
 def find_file_in_catkin_ws(filename):
-  catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
-  result = ''
-  for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
-    for currfile in files:
-      filename_path = os.path.join(root, currfile)
-      if filename in filename_path:
-        if result:
-          result += ' OR '
-        result += filename_path.replace(catkin_ws_path, '')
-  return result
+  if not find_file_in_catkin_ws_cache:
+    catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
+    result = ''
+    for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
+      for currfile in files:
+        if currfile.endswith('.stl') or currfile.endswith('.dae'):
+          filename_path = os.path.join(root, currfile).replace(catkin_ws_path, '')
+          find_file_in_catkin_ws_cache.append(filename_path)
+  matching = [path for path in find_file_in_catkin_ws_cache if filename in path]
+  return ' OR '.join(matching)
 
 
 def prettyXML(uglyXML):
