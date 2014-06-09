@@ -117,6 +117,13 @@ def pose2origin(node, pose):
   ET.SubElement(node, 'origin', {'xyz': array2string(rounded(xyz)), 'rpy': array2string(rounded(rpy))})
 
 
+def homogeneous_times_vector(homogeneous, vector):
+  vector_as_hom = identity_matrix()
+  vector_as_hom[:3,3] = vector.T
+  res = numpy.dot(homogeneous, vector_as_hom)
+  return res[:3,3].T 
+
+
 
 
 
@@ -374,6 +381,15 @@ class Model(SpatialEntity):
       graph.add_edge(full_prefix + joint.parent, full_prefix + joint.child, label=full_prefix + joint.name + '\\nrel: ' + homogeneous2tq_string_rounded(joint.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(joint.pose_world))
 
 
+  def get_root_model(self):
+    curr_model = self
+    while True:
+      if not curr_model.parent_model:
+        return curr_model
+      curr_model = curr_model.parent_model
+
+
+
 
 class Link(SpatialEntity):
   def __init__(self, parent_model, **kwargs):
@@ -484,7 +500,8 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    self.axis.add_urdf_elements(jointnode)
+    # TODO still wrong
+    self.axis.add_urdf_elements(jointnode, concatenate_matrices(inverse_matrix(self.parent_model.get_root_model().pose_world), self.pose_world))
 
 
 
@@ -510,7 +527,7 @@ class Axis(object):
     if node.tag != 'axis':
       print('Invalid node of type %s instead of axis. Aborting.' % node.tag)
       return
-    self.xyz = numpy.array(get_tag(node, 'xyz'))
+    self.xyz = numpy.array(get_tag(node, 'xyz').split())
     limitnode = get_node(node, 'limit')
     if limitnode == None:
       print('limit Tag missing from joint. Aborting.')
@@ -521,8 +538,12 @@ class Axis(object):
     self.velocity_limit = float(get_tag(limitnode, 'velocity', 0))
 
 
-  def add_urdf_elements(self, node):
-    axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(self.xyz)})
+  def add_urdf_elements(self, node, modelMVjoint):
+    # SDF 1.4 axis is specified in model frame, but urdf in joint=child frame
+    xyz_joint = homogeneous_times_vector(inverse_matrix(modelMVjoint), self.xyz)
+    xyz_joint /= numpy.linalg.norm(xyz_joint)
+    #print('self.xyz=%s xyz_joint=%s' % (self.xyz, xyz_joint))
+    axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(xyz_joint)})
     limitnode = ET.SubElement(node, 'limit', {'lower': str(self.lower_limit), 'upper': str(self.upper_limit), 'effort': str(self.effort_limit), 'velocity': str(self.velocity_limit)})
 
 
