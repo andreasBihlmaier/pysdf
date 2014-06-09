@@ -511,8 +511,8 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    print('self.pose_world\n', self.pose_world)
-    print('self.parent_model.pose_world\n', self.parent_model.pose_world)
+    #print('self.pose_world\n', self.pose_world)
+    #print('self.parent_model.pose_world\n', self.parent_model.pose_world)
     self.axis.add_urdf_elements(jointnode, concatenate_matrices(inverse_matrix(self.pose_world), self.parent_model.pose_world))
 
 
@@ -560,7 +560,7 @@ class Axis(object):
       rotation_modelCBTjoint = rotation_only(modelCBTjoint)
       xyz_joint = homogeneous_times_vector(rotation_modelCBTjoint, self.xyz)
       xyz_joint /= numpy.linalg.norm(xyz_joint)
-      print('self.xyz=%s\nmodelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
+      #print('self.xyz=%s\nmodelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
     else: # SDF 1.5 axis is specified in joint frame unless the use_parent_model_frame flag is set to true
       print('UNTESTED')
       xyz_joint = self.xyz
