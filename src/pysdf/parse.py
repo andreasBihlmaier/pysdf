@@ -9,11 +9,12 @@ import numbers
 from tf.transformations import *
 
 models_path = os.path.expanduser('~/.gazebo/models/')
+catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
+supported_sdf_versions = [1.4, 1.5]
 
 
 def find_file_in_catkin_ws(filename):
   if not find_file_in_catkin_ws.cache:
-    catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
     result = ''
     for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
       for currfile in files:
@@ -147,27 +148,29 @@ class SDF(object):
       print('Not a SDF file. Aborting.')
       return
     self.version = float(root.attrib['version'])
-    if self.version != 1.4:
+    if not self.version in supported_sdf_versions:
       print('Unsupported SDF version in %s. Aborting.\n' % filename)
       return
-    self.world.from_tree(root)
+    self.world.from_tree(root, version=self.version)
 
 
 
 class World(object):
-  def __init__(self):
+  def __init__(self, **kwargs):
     self.name = '__default__'
     self.models = []
     self.lights = []
+    self.version = kwargs.get('version', 0.0)
 
 
-  def from_tree(self, node):
+  def from_tree(self, node, **kwargs):
+    self.version = kwargs.get('version', self.version)
     if node.findall('world'):
       node = node.findall('world')[0]
       for include_node in node.iter('include'):
         self.models.append(model_from_include(None, include_node))
       # TODO lights
-    self.models += [Model(tree=model_node) for model_node in node.findall('model')]
+    self.models += [Model(tree=model_node, version=self.version) for model_node in node.findall('model')]
 
 
   def plot_to_file(self, plot_filename):
@@ -213,6 +216,7 @@ class Model(SpatialEntity):
   def __init__(self, parent_model = None, **kwargs):
     super(Model, self).__init__(**kwargs)
     self.parent_model = parent_model
+    self.version = kwargs.get('version', 0.0)
     self.submodels = []
     self.links = []
     self.joints = []
@@ -232,6 +236,7 @@ class Model(SpatialEntity):
     return ''.join((
       'Model(\n', 
       '  %s\n' % indent(super(Model, self).__repr__(), 2),
+      '  version: %s\n' % self.version,
       '  root_link: %s\n' % self.root_link.name if self.root_link else '',
       '  links:\n',
       '    %s' % '\n    '.join([indent(str(l), 4) for l in self.links]),
@@ -252,8 +257,8 @@ class Model(SpatialEntity):
     if root.tag != 'sdf':
       print('Not a SDF file. Aborting.')
       return
-    version = float(root.attrib['version'])
-    if version != 1.4:
+    self.version = float(root.attrib['version'])
+    if not self.version in supported_sdf_versions:
       print('Unsupported SDF version in %s. Aborting.\n' % filename)
       return
     modelnode = get_node(root, 'model')
@@ -274,6 +279,7 @@ class Model(SpatialEntity):
     if node.tag != 'model':
       print('Invalid node of type %s instead of model. Aborting.' % node.tag)
       return
+    self.version = kwargs.get('version', self.version)
     super(Model, self).from_tree(node, **kwargs)
     self.links = [Link(self, tree=link_node) for link_node in node.iter('link')]
     self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
@@ -460,7 +466,7 @@ class Joint(SpatialEntity):
     self.type = ''
     self.parent = ''
     self.child = ''
-    self.axis = Axis()
+    self.axis = Axis(self)
     self.tree_parent_link = None
     self.tree_child_link = None
     if 'tree' in kwargs:
@@ -489,7 +495,7 @@ class Joint(SpatialEntity):
     self.type = node.attrib['type']
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
-    self.axis = Axis(tree=get_node(node, 'axis'))
+    self.axis = Axis(self, tree=get_node(node, 'axis'))
 
 
   def add_urdf_elements(self, node, prefix):
@@ -505,24 +511,30 @@ class Joint(SpatialEntity):
       jointnode.attrib['type'] = 'fixed'
     else:
       jointnode.attrib['type'] = self.type
-    self.axis.add_urdf_elements(jointnode, concatenate_matrices(self.pose_world, inverse_matrix(self.parent_model.pose_world)))
+    print('self.pose_world\n', self.pose_world)
+    print('self.parent_model.pose_world\n', self.parent_model.pose_world)
+    self.axis.add_urdf_elements(jointnode, concatenate_matrices(inverse_matrix(self.pose_world), self.parent_model.pose_world))
 
 
 
 
 class Axis(object):
-  def __init__(self, **kwargs):
+  def __init__(self, joint, **kwargs):
+    self.joint = joint
+    self.version = self.joint.parent_model.version
     self.xyz = numpy.array([0, 0, 0])
     self.lower_limit = 0
     self.upper_limit = 0
     self.effort_limit = 0
     self.velocity_limit = 0
+    if self.version >= 1.5:
+      self.use_parent_model_frame = False
     if 'tree' in kwargs:
       self.from_tree(kwargs['tree'])
 
 
   def __repr__(self):
-    return 'Axis(xyz=%s, lower_limit=%s, upper_limit=%s, effort=%s, velocity=%s)' % (self.xyz, self.lower_limit, self.upper_limit, self.effort_limit, self.velocity_limit)
+    return 'Axis(xyz=%s,%s lower_limit=%s, upper_limit=%s, effort=%s, velocity=%s)' % (self.xyz, ' use_parent_model_frame=%s,' % self.use_parent_model_frame if self.version >= 1.5 else '', self.lower_limit, self.upper_limit, self.effort_limit, self.velocity_limit)
 
 
   def from_tree(self, node):
@@ -532,6 +544,7 @@ class Axis(object):
       print('Invalid node of type %s instead of axis. Aborting.' % node.tag)
       return
     self.xyz = numpy.array(get_tag(node, 'xyz').split())
+    self.use_parent_model_frame = bool(get_tag(node, 'use_parent_model_frame'))
     limitnode = get_node(node, 'limit')
     if limitnode == None:
       print('limit Tag missing from joint. Aborting.')
@@ -543,11 +556,14 @@ class Axis(object):
 
 
   def add_urdf_elements(self, node, modelCBTjoint):
-    # SDF 1.4 axis is specified in model frame, but urdf in joint=child frame
-    rotation_modelCBTjoint = rotation_only(modelCBTjoint)
-    xyz_joint = homogeneous_times_vector(rotation_modelCBTjoint, self.xyz)
-    xyz_joint /= numpy.linalg.norm(xyz_joint)
-    #print('self.xyz=%s modelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
+    if (self.version <= 1.4) or (self.version >= 1.5 and self.use_parent_model_frame): # SDF 1.4 axis is specified in model frame
+      rotation_modelCBTjoint = rotation_only(modelCBTjoint)
+      xyz_joint = homogeneous_times_vector(rotation_modelCBTjoint, self.xyz)
+      xyz_joint /= numpy.linalg.norm(xyz_joint)
+      print('self.xyz=%s\nmodelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
+    else: # SDF 1.5 axis is specified in joint frame unless the use_parent_model_frame flag is set to true
+      print('UNTESTED')
+      xyz_joint = self.xyz
     axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(rounded(xyz_joint))})
     limitnode = ET.SubElement(node, 'limit', {'lower': str(self.lower_limit), 'upper': str(self.upper_limit), 'effort': str(self.effort_limit), 'velocity': str(self.velocity_limit)})
 
@@ -681,6 +697,7 @@ class LinkPart(SpatialEntity):
       if mesh_found:
         mesh_path = 'package://' + mesh_found
       else:
+        print('Could not find mesh %s in %s' % (mesh_file, catkin_ws_path))
         mesh_path = 'package://PATHTOMESHES/' + mesh_file
       meshnode = ET.SubElement(geometrynode, 'mesh', {'filename': mesh_path})
 
