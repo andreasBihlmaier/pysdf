@@ -7,10 +7,16 @@ import xml.dom.minidom
 import numbers
 
 from tf.transformations import *
+from geometry_msgs.msg import Pose
 
 models_path = os.path.expanduser('~/.gazebo/models/')
 catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
 supported_sdf_versions = [1.4, 1.5]
+
+
+
+def sdf2tfname(sdfname):
+  return sdfname.replace('::', '__').replace('@', 'AT')
 
 
 def find_file_in_catkin_ws(filename):
@@ -48,6 +54,19 @@ def homogeneous2translation_rpy(homogeneous):
   translation = translation_from_matrix(homogeneous)
   rpy = euler_from_matrix(homogeneous)
   return translation, rpy
+
+
+def homogeneous2pose_msg(homogeneous):
+  pose = Pose()
+  translation, quaternion = homogeneous2translation_quaternion(homogeneous)
+  pose.position.x = translation[0]
+  pose.position.y = translation[1]
+  pose.position.z = translation[2]
+  pose.orientation.x = quaternion[0]
+  pose.orientation.y = quaternion[1]
+  pose.orientation.z = quaternion[2]
+  pose.orientation.w = quaternion[3]
+  return pose
 
 
 def rounded(val):
@@ -724,7 +743,7 @@ class LinkPart(SpatialEntity):
         elif gtype == 'sphere':
           self.geometry_data = {'radius': get_tag(typenode, 'radius')}
         elif gtype == 'mesh':
-          self.geometry_data = {'uri': get_tag(typenode, 'uri'), 'scale': get_tag(typenode, 'scale')}
+          self.geometry_data = {'uri': get_tag(typenode, 'uri'), 'scale': get_tag(typenode, 'scale', '1.0 1.0 1.0')}
 
 
   def __repr__(self):
