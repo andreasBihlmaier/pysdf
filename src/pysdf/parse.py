@@ -139,6 +139,8 @@ class SDF(object):
     self.world = World()
     if 'file' in kwargs:
       self.from_file(kwargs['file'])
+    elif 'model' in kwargs:
+      self.from_model(kwargs['model'])
 
 
   def from_file(self, filename):
@@ -152,6 +154,10 @@ class SDF(object):
       print('Unsupported SDF version in %s. Aborting.\n' % filename)
       return
     self.world.from_tree(root, version=self.version)
+
+
+  def from_model(self, modelname):
+    self.from_file(models_path + modelname + '/model.sdf')
 
 
 
@@ -186,6 +192,29 @@ class World(object):
     for model in self.models:
       model.plot(graph)
       graph.add_edge('world', model.name + '::' + model.root_link.name)
+
+
+  def get_link(self, requested_linkname):
+    #print('World.get_link: rl=%s' % requested_linkname)
+    for model in self.models:
+      link = model.get_link(requested_linkname, model.name)
+      if link:
+        return link
+
+
+  def for_all_links(self, func):
+    for model in self.models:
+      model.for_all_links(func)
+
+
+  def for_all_joints(self, func):
+    for model in self.models:
+      model.for_all_joints(func)
+
+
+  def for_all_submodels(self, func):
+    for model in self.models:
+      model.for_all_submodels(func)
 
 
 
@@ -322,7 +351,7 @@ class Model(SpatialEntity):
 
 
   def get_link(self, requested_linkname, prefix = ''):
-    #print('get_link: n=%s rl=%s p=%s' % (self.name, requested_linkname, prefix))
+    #print('Model.get_link: n=%s rl=%s p=%s' % (self.name, requested_linkname, prefix))
     full_prefix = prefix + '::' if prefix else ''
     for link in self.links:
       if full_prefix + link.name == requested_linkname:
@@ -399,6 +428,29 @@ class Model(SpatialEntity):
       if not curr_model.parent_model:
         return curr_model
       curr_model = curr_model.parent_model
+
+
+  def for_all_links(self, func, prefix = ''):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    for link in self.links:
+      func(link, full_prefix + '::' + link.name)
+    for submodel in self.submodels:
+      submodel.for_all_links(func, full_prefix)
+
+
+  def for_all_joints(self, func, prefix = ''):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    for joint in self.joints:
+      func(joint, full_prefix + '::' + joint.name)
+    for submodel in self.submodels:
+      submodel.for_all_joints(func, full_prefix)
+
+
+  def for_all_submodels(self, func, prefix = ''):
+    full_prefix = prefix + '::' + self.name if prefix else self.name
+    func(self, full_prefix)
+    for submodel in self.submodels:
+      submodel.for_all_submodels(func, full_prefix)
 
 
 
