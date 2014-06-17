@@ -163,6 +163,9 @@ class SDF(object):
 
 
   def from_file(self, filename):
+    if not os.path.exists(filename):
+      print('Failed to open SDF because %s does not exist' % filename)
+      return
     tree = ET.parse(filename)
     root = tree.getroot()
     if root.tag != 'sdf':
@@ -300,6 +303,9 @@ class Model(SpatialEntity):
 
 
   def from_file(self, filename, **kwargs):
+    if not os.path.exists(filename):
+      print('Failed to open Model because %s does not exist' % filename)
+      return
     tree = ET.parse(filename)
     root = tree.getroot()
     if root.tag != 'sdf':
