@@ -29,6 +29,27 @@ def find_file_in_catkin_ws(filename):
 find_file_in_catkin_ws.cache = []
 
 
+def find_model_in_gazebo_dir(modelname):
+  if not find_model_in_gazebo_dir.cache:
+    for root, dirs, files in os.walk(models_path, followlinks=True):
+      for currfile in files:
+        if currfile != 'model.sdf':
+          continue
+        filename_path = os.path.join(root, currfile)
+        tree = ET.parse(filename_path)
+        root = tree.getroot()
+        if root.tag != 'sdf':
+          continue
+        modelnode = get_node(root, 'model')
+        if modelnode == None:
+          continue
+        modelname_in_file = modelnode.attrib['name']
+        find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
+    #print(find_model_in_gazebo_dir.cache)
+  return find_model_in_gazebo_dir.cache.get(modelname)
+find_model_in_gazebo_dir.cache = {}
+
+
 def pose2origin(node, pose):
   xyz, rpy = homogeneous2translation_rpy(pose)
   ET.SubElement(node, 'origin', {'xyz': array2string(rounded(xyz)), 'rpy': array2string(rounded(rpy))})
@@ -107,7 +128,13 @@ class SDF(object):
 
 
   def from_model(self, modelname):
-    self.from_file(models_path + modelname + '/model.sdf')
+    sdf_file = models_path + modelname + '/model.sdf'
+    if not os.path.exists(sdf_file):
+      sdf_file = find_model_in_gazebo_dir(modelname)
+    if not sdf_file:
+      print('Could not resolve modelname=%s to its SDF file in %s' % (modelname, models_path))
+      return
+    self.from_file(sdf_file)
 
 
 
@@ -152,19 +179,19 @@ class World(object):
         return link
 
 
-  def for_all_links(self, func):
+  def for_all_links(self, func, **kwargs):
     for model in self.models:
-      model.for_all_links(func)
+      model.for_all_links(func, **kwargs)
 
 
-  def for_all_joints(self, func):
+  def for_all_joints(self, func, **kwargs):
     for model in self.models:
-      model.for_all_joints(func)
+      model.for_all_joints(func, **kwargs)
 
 
-  def for_all_submodels(self, func):
+  def for_all_submodels(self, func, **kwargs):
     for model in self.models:
-      model.for_all_submodels(func)
+      model.for_all_submodels(func, **kwargs)
 
 
 
@@ -383,27 +410,27 @@ class Model(SpatialEntity):
       curr_model = curr_model.parent_model
 
 
-  def for_all_links(self, func, prefix = ''):
+  def for_all_links(self, func, prefix = '', **kwargs):
     full_prefix = prefix + '::' + self.name if prefix else self.name
     for link in self.links:
-      func(link, full_prefix + '::' + link.name)
+      func(link, full_prefix + '::' + link.name, **kwargs)
     for submodel in self.submodels:
-      submodel.for_all_links(func, full_prefix)
+      submodel.for_all_links(func, full_prefix, **kwargs)
 
 
-  def for_all_joints(self, func, prefix = ''):
+  def for_all_joints(self, func, prefix = '', **kwargs):
     full_prefix = prefix + '::' + self.name if prefix else self.name
     for joint in self.joints:
-      func(joint, full_prefix + '::' + joint.name)
+      func(joint, full_prefix + '::' + joint.name, **kwargs)
     for submodel in self.submodels:
-      submodel.for_all_joints(func, full_prefix)
+      submodel.for_all_joints(func, full_prefix, **kwargs)
 
 
-  def for_all_submodels(self, func, prefix = ''):
+  def for_all_submodels(self, func, prefix = '', **kwargs):
     full_prefix = prefix + '::' + self.name if prefix else self.name
-    func(self, full_prefix)
+    func(self, full_prefix, **kwargs)
     for submodel in self.submodels:
-      submodel.for_all_submodels(func, full_prefix)
+      submodel.for_all_submodels(func, full_prefix, **kwargs)
 
 
   def get_full_name(self):
