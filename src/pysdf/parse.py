@@ -4,19 +4,16 @@ import itertools
 import os
 import xml.etree.ElementTree as ET
 import xml.dom.minidom
-import numbers
 
 from tf.transformations import *
-from geometry_msgs.msg import Pose
+
+from naming import *
+from conversions import *
 
 models_path = os.path.expanduser('~/.gazebo/models/')
 catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
 supported_sdf_versions = [1.4, 1.5]
 
-
-
-def sdf2tfname(sdfname):
-  return sdfname.replace('::', '__').replace('@', 'AT')
 
 
 def find_file_in_catkin_ws(filename):
@@ -32,60 +29,13 @@ def find_file_in_catkin_ws(filename):
 find_file_in_catkin_ws.cache = []
 
 
+def pose2origin(node, pose):
+  xyz, rpy = homogeneous2translation_rpy(pose)
+  ET.SubElement(node, 'origin', {'xyz': array2string(rounded(xyz)), 'rpy': array2string(rounded(rpy))})
+
+
 def prettyXML(uglyXML):
   return xml.dom.minidom.parseString(uglyXML).toprettyxml(indent='  ')
-
-
-def homogeneous2translation_quaternion(homogeneous):
-  """
-  Translation: [x, y, z]
-  Quaternion: [x, y, z, w]
-  """
-  translation = translation_from_matrix(homogeneous)
-  quaternion = quaternion_from_matrix(homogeneous)
-  return translation, quaternion
-
-
-def homogeneous2translation_rpy(homogeneous):
-  """
-  Translation: [x, y, z]
-  RPY: [sx, sy, sz]
-  """
-  translation = translation_from_matrix(homogeneous)
-  rpy = euler_from_matrix(homogeneous)
-  return translation, rpy
-
-
-def homogeneous2pose_msg(homogeneous):
-  pose = Pose()
-  translation, quaternion = homogeneous2translation_quaternion(homogeneous)
-  pose.position.x = translation[0]
-  pose.position.y = translation[1]
-  pose.position.z = translation[2]
-  pose.orientation.x = quaternion[0]
-  pose.orientation.y = quaternion[1]
-  pose.orientation.z = quaternion[2]
-  pose.orientation.w = quaternion[3]
-  return pose
-
-
-def rounded(val):
-  if isinstance(val, numbers.Number):
-    return int(round(val,6) * 1e5) / 1.0e5
-  else:
-    return numpy.array([rounded(v) for v in val])
-
-
-def array2string(array):
-  return numpy.array_str(array).strip('[]. ').replace('. ', ' ')
-
-
-def homogeneous2tq_string(homogeneous):
-  return 't=%s q=%s' % homogeneous2translation_quaternion(homogeneous)
-
-
-def homogeneous2tq_string_rounded(homogeneous):
-  return 't=%s q=%s' % tuple(rounded(o) for o in homogeneous2translation_quaternion(homogeneous))
 
 
 def get_tag(node, tagname, default = None):
@@ -102,18 +52,6 @@ def get_node(node, tagname, default = None):
     return tag[0]
   else:
     return default
-
-
-def string2float_list(s):
-  return [float(i) for i in s.split()]
-
-
-def pose_string2homogeneous(pose):
-  pose_float = string2float_list(pose)
-  translate = pose_float[:3]
-  angles = pose_float[3:]
-  homogeneous = compose_matrix(None, None, angles, translate)
-  return homogeneous
 
 
 def get_tag_pose(node):
@@ -133,21 +71,11 @@ def model_from_include(parent, include_node):
     return Model(parent, name=submodel_name, pose=submodel_pose, file=submodel_path)
 
 
-def pose2origin(node, pose):
-  xyz, rpy = homogeneous2translation_rpy(pose)
-  ET.SubElement(node, 'origin', {'xyz': array2string(rounded(xyz)), 'rpy': array2string(rounded(rpy))})
-
-
 def homogeneous_times_vector(homogeneous, vector):
   vector_as_hom = identity_matrix()
   vector_as_hom[:3,3] = vector.T
   res = numpy.dot(homogeneous, vector_as_hom)
   return res[:3,3].T 
-
-
-def rotation_only(homogeneous):
-  euler = euler_from_matrix(homogeneous)
-  return euler_matrix(euler[0], euler[1], euler[2])
 
 
 
