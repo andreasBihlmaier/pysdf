@@ -47,6 +47,12 @@ def homogeneous2pose_msg(homogeneous):
   return pose
 
 
+def pose_msg2homogeneous(pose):
+  trans = translation_matrix((pose.position.x, pose.position.y, pose.position.z))
+  rot = quaternion_matrix((pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w))
+  return concatenate_matrices(trans, rot)
+
+
 def array2string(array):
   return numpy.array_str(array).strip('[]. ').replace('. ', ' ')
 

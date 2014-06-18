@@ -406,6 +406,16 @@ class Model(SpatialEntity):
       submodel.for_all_submodels(func, full_prefix)
 
 
+  def get_full_name(self):
+    name = self.name
+    curr_model = self
+    while True:
+      if not curr_model.parent_model:
+        break
+      curr_model = curr_model.parent_model
+      name = curr_model.name + '::' + name
+    return name
+
 
 
 class Link(SpatialEntity):
@@ -461,6 +471,11 @@ class Link(SpatialEntity):
     self.inertial.add_urdf_elements(linknode, urdf_pose)
     self.collision.add_urdf_elements(linknode, prefix, urdf_pose)
     self.visual.add_urdf_elements(linknode, prefix, urdf_pose)
+
+
+  def get_full_name(self):
+    return self.parent_model.get_full_name() + '::' + self.name
+    
 
 
 
@@ -519,6 +534,10 @@ class Joint(SpatialEntity):
     #print('self.pose_world\n', self.pose_world)
     #print('self.parent_model.pose_world\n', self.parent_model.pose_world)
     self.axis.add_urdf_elements(jointnode, concatenate_matrices(inverse_matrix(self.pose_world), self.parent_model.pose_world))
+
+
+  def get_full_name(self):
+    return self.parent_model.get_full_name() + '::' + self.name
 
 
 
