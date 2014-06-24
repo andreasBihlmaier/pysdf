@@ -369,6 +369,9 @@ class Model(SpatialEntity):
 
 
   def find_root_link(self):
+    if not self.links:
+      print('Model %s has no links and therefore no root link. Aborting' % self.name)
+      return None
     curr_link = self.links[0]
     while True:
       parent_link = self.get_parent(curr_link.name)
