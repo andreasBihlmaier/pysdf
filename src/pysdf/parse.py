@@ -345,7 +345,12 @@ class Model(SpatialEntity):
   def build_tree(self):
     for joint in self.joints:
       joint.tree_parent_link = self.get_link(joint.parent)
+      if not joint.tree_parent_link:
+        print('Failed to find parent %s of joint %s. Aborting' % (joint.parent, joint.name))
       joint.tree_child_link = self.get_link(joint.child)
+      if not joint.tree_child_link:
+        print('Failed to find child %s of joint %s. Aborting' % (joint.child, joint.name))
+        return None
       joint.tree_parent_link.tree_child_joints.append(joint)
       joint.tree_child_link.tree_parent_joint = joint
     for submodel in self.submodels:
