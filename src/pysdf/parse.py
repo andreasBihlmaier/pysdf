@@ -491,7 +491,7 @@ class Link(SpatialEntity):
 
   def add_urdf_elements(self, node, prefix):
     full_prefix = prefix + '::' if prefix else ''
-    linknode = ET.SubElement(node, 'link', {'name': full_prefix + self.name})
+    linknode = ET.SubElement(node, 'link', {'name': sdf2tfname(full_prefix + self.name)})
     # urdf links do not have a coordinate system themselves, only their parts (inertial, collision, visual) have one
     if self.tree_parent_joint:
       if self.tree_parent_joint.parent_model == self.parent_model:
@@ -552,9 +552,9 @@ class Joint(SpatialEntity):
 
   def add_urdf_elements(self, node, prefix):
     full_prefix = prefix + '::' if prefix else ''
-    jointnode = ET.SubElement(node, 'joint', {'name': full_prefix + self.name})
-    parentnode = ET.SubElement(jointnode, 'parent', {'link': full_prefix + self.parent})
-    childnode = ET.SubElement(jointnode, 'child', {'link': full_prefix + self.child})
+    jointnode = ET.SubElement(node, 'joint', {'name': sdf2tfname(full_prefix + self.name)})
+    parentnode = ET.SubElement(jointnode, 'parent', {'link': sdf2tfname(full_prefix + self.parent)})
+    childnode = ET.SubElement(jointnode, 'child', {'link': sdf2tfname(full_prefix + self.child)})
     if self.tree_parent_link.parent_model == self.parent_model:
       pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.pose_world))
     else: # joint crosses includes
@@ -738,7 +738,7 @@ class LinkPart(SpatialEntity):
   def add_urdf_elements(self, node, prefix, link_pose, part_type):
     if not self.geometry_type:
       return
-    partnode = ET.SubElement(node, part_type, {'name': prefix + '::' + self.name})
+    partnode = ET.SubElement(node, part_type, {'name': sdf2tfname(prefix + '::' + self.name)})
     pose2origin(partnode, concatenate_matrices(link_pose, self.pose))
     geometrynode = ET.SubElement(partnode, 'geometry')
     if self.geometry_type == 'box':
