@@ -16,17 +16,23 @@ supported_sdf_versions = [1.4, 1.5]
 
 
 
-def find_file_in_catkin_ws(filename):
-  if not find_file_in_catkin_ws.cache:
+def find_mesh_in_catkin_ws(filename):
+  if not find_mesh_in_catkin_ws.cache:
     result = ''
     for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
       for currfile in files:
         if currfile.endswith('.stl') or currfile.endswith('.dae'):
-          filename_path = os.path.join(root, currfile).replace(catkin_ws_path, '')
-          find_file_in_catkin_ws.cache.append(filename_path)
-  matching = [path for path in find_file_in_catkin_ws.cache if filename in path]
+          partial_path = ''
+          for path_part in root.split('/'):
+            partial_path += path_part + '/'
+            if os.path.exists(partial_path + '/package.xml'):
+              break
+          catkin_stack_path = partial_path.replace(path_part + '/', '')
+          filename_path = os.path.join(root, currfile).replace(catkin_stack_path, '')
+          find_mesh_in_catkin_ws.cache.append(filename_path)
+  matching = [path for path in find_mesh_in_catkin_ws.cache if filename in path]
   return ' OR '.join(matching)
-find_file_in_catkin_ws.cache = []
+find_mesh_in_catkin_ws.cache = []
 
 
 def find_model_in_gazebo_dir(modelname):
@@ -752,7 +758,7 @@ class LinkPart(SpatialEntity):
       spherenode = ET.SubElement(geometrynode, 'sphere', {'radius': self.geometry_data['radius']})
     elif self.geometry_type == 'mesh':
       mesh_file = '/'.join(self.geometry_data['uri'].split('/')[3:])
-      mesh_found = find_file_in_catkin_ws(mesh_file)
+      mesh_found = find_mesh_in_catkin_ws(mesh_file)
       if mesh_found:
         mesh_path = 'package://' + mesh_found
       else:
