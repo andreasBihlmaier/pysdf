@@ -360,12 +360,12 @@ class Model(SpatialEntity):
   def calculate_absolute_pose(self, worldMVparent = identity_matrix()):
     worldMVmodel = concatenate_matrices(worldMVparent, self.pose)
     self.pose_world = worldMVmodel
+    for submodel in self.submodels:
+      submodel.calculate_absolute_pose(worldMVmodel)
     for link in self.links:
       link.pose_world = concatenate_matrices(worldMVmodel, link.pose)
     for joint in self.joints:
-      joint.pose_world = concatenate_matrices(worldMVmodel, joint.tree_child_link.pose, joint.pose)
-    for submodel in self.submodels:
-      submodel.calculate_absolute_pose(worldMVmodel)
+      joint.pose_world = concatenate_matrices(joint.tree_child_link.pose_world, joint.pose)
 
 
   def find_root_link(self):

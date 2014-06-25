@@ -74,6 +74,7 @@ def pose_string2homogeneous(pose):
   translate = pose_float[:3]
   angles = pose_float[3:]
   homogeneous = compose_matrix(None, None, angles, translate)
+  #print('pose_string=%s; translate=%s angles=%s homogeneous:\n%s' % (pose, translate, angles, homogeneous))
   return homogeneous
 
 
