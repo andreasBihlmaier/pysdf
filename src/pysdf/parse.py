@@ -528,6 +528,7 @@ class Joint(SpatialEntity):
     self.parent = ''
     self.child = ''
     self.axis = Axis(self)
+    self.axis2 = None
     self.tree_parent_link = None
     self.tree_child_link = None
     if 'tree' in kwargs:
@@ -542,6 +543,7 @@ class Joint(SpatialEntity):
       '  parent: %s\n' % self.parent,
       '  child: %s\n' % self.child,
       '  axis: %s\n' % self.axis,
+      '  axis2: %s\n' % self.axis2 if self.axis2 else '',
       ')'
     ))
 
@@ -557,6 +559,8 @@ class Joint(SpatialEntity):
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
     self.axis = Axis(self, tree=get_node(node, 'axis'))
+    if get_node(node, 'axis2'):
+      self.axis2 = Axis(self, tree=get_node(node, 'axis2'))
 
 
   def add_urdf_elements(self, node, prefix):
@@ -570,6 +574,18 @@ class Joint(SpatialEntity):
       pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.tree_child_link.pose_world))
     if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
       jointnode.attrib['type'] = 'fixed'
+    elif self.type == 'universal':
+      # Simulate universal robot as
+      # self.parent -> revolute joint (self) -> dummy link -> revolute joint -> self.child
+      print('universal!')
+      jointnode.attrib['type'] = 'revolute'
+      dummylinknode = ET.SubElement(node, 'link', {'name': sdf2tfname(full_prefix + self.name + '::revolute_dummy_link')})
+      childnode.attrib['link'] = dummylinknode.attrib['name']
+      dummyjointnode = ET.SubElement(node, 'joint', {'name': sdf2tfname(full_prefix + self.name + '::revolute_dummy_joint')})
+      ET.SubElement(dummyjointnode, 'parent', {'link': dummylinknode.attrib['name']})
+      ET.SubElement(dummyjointnode, 'child', {'link': sdf2tfname(full_prefix + self.child)})
+      # TODO use self.axis2 as axis for dummyjointnode, see self.axis.add_urdf_elements(...) below
+      dummyjointnode.attrib['type'] = 'revolute'
     else:
       jointnode.attrib['type'] = self.type
     #print('self.pose_world\n', self.pose_world)
