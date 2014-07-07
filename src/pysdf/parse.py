@@ -559,7 +559,7 @@ class Joint(SpatialEntity):
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
     self.axis = Axis(self, tree=get_node(node, 'axis'))
-    if get_node(node, 'axis2'):
+    if get_node(node, 'axis2') != None:
       self.axis2 = Axis(self, tree=get_node(node, 'axis2'))
 
 
@@ -577,15 +577,14 @@ class Joint(SpatialEntity):
     elif self.type == 'universal':
       # Simulate universal robot as
       # self.parent -> revolute joint (self) -> dummy link -> revolute joint -> self.child
-      print('universal!')
       jointnode.attrib['type'] = 'revolute'
       dummylinknode = ET.SubElement(node, 'link', {'name': sdf2tfname(full_prefix + self.name + '::revolute_dummy_link')})
       childnode.attrib['link'] = dummylinknode.attrib['name']
       dummyjointnode = ET.SubElement(node, 'joint', {'name': sdf2tfname(full_prefix + self.name + '::revolute_dummy_joint')})
       ET.SubElement(dummyjointnode, 'parent', {'link': dummylinknode.attrib['name']})
       ET.SubElement(dummyjointnode, 'child', {'link': sdf2tfname(full_prefix + self.child)})
-      # TODO use self.axis2 as axis for dummyjointnode, see self.axis.add_urdf_elements(...) below
       dummyjointnode.attrib['type'] = 'revolute'
+      self.axis2.add_urdf_elements(dummyjointnode, concatenate_matrices(inverse_matrix(self.pose_world), self.parent_model.pose_world))
     else:
       jointnode.attrib['type'] = self.type
     #print('self.pose_world\n', self.pose_world)
@@ -621,8 +620,8 @@ class Axis(object):
   def from_tree(self, node):
     if node == None:
       return
-    if node.tag != 'axis':
-      print('Invalid node of type %s instead of axis. Aborting.' % node.tag)
+    if node.tag != 'axis' and node.tag != 'axis2':
+      print('Invalid node of type %s instead of axis(2). Aborting.' % node.tag)
       return
     self.xyz = numpy.array(get_tag(node, 'xyz').split())
     self.use_parent_model_frame = bool(get_tag(node, 'use_parent_model_frame'))
