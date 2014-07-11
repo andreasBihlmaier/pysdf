@@ -568,10 +568,12 @@ class Joint(SpatialEntity):
     jointnode = ET.SubElement(node, 'joint', {'name': sdf2tfname(full_prefix + self.name)})
     parentnode = ET.SubElement(jointnode, 'parent', {'link': sdf2tfname(full_prefix + self.parent)})
     childnode = ET.SubElement(jointnode, 'child', {'link': sdf2tfname(full_prefix + self.child)})
+    # in SDF a joint's pose is given in child link frame, in URDF joint frame = child link frame, i.e. specifiy relative to parent joint (not parent link)
+    parent_pose_world = self.tree_parent_link.tree_parent_joint.pose_world if self.tree_parent_link.tree_parent_joint else identity_matrix()
     if self.tree_parent_link.parent_model == self.parent_model:
-      pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.pose_world))
+      pose2origin(jointnode, concatenate_matrices(inverse_matrix(parent_pose_world), self.pose_world))
     else: # joint crosses includes
-      pose2origin(jointnode, concatenate_matrices(inverse_matrix(self.tree_parent_link.pose_world), self.tree_child_link.pose_world))
+      pose2origin(jointnode, concatenate_matrices(inverse_matrix(parent_pose_world), self.tree_child_link.pose_world))
     if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
       jointnode.attrib['type'] = 'fixed'
     elif self.type == 'universal':
