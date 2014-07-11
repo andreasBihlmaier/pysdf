@@ -779,7 +779,7 @@ class LinkPart(SpatialEntity):
       else:
         print('Could not find mesh %s in %s' % (mesh_file, catkin_ws_path))
         mesh_path = 'package://PATHTOMESHES/' + mesh_file
-      meshnode = ET.SubElement(geometrynode, 'mesh', {'filename': mesh_path})
+      meshnode = ET.SubElement(geometrynode, 'mesh', {'filename': mesh_path, 'scale': self.geometry_data['scale']})
 
 
 
