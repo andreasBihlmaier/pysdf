@@ -8,7 +8,9 @@ from geometry_msgs.msg import Pose
 
 
 def rounded(val):
-  if isinstance(val, numbers.Number):
+  if isinstance(val, str):
+    return rounded(float(val))
+  elif isinstance(val, numbers.Number):
     return int(round(val,6) * 1e5) / 1.0e5
   else:
     return numpy.array([rounded(v) for v in val])
