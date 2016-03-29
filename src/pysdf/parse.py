@@ -10,9 +10,13 @@ from tf.transformations import *
 from naming import *
 from conversions import *
 
-models_path = os.path.expanduser('~/.gazebo/models/')
+models_paths = [os.path.expanduser('~/.gazebo/models/')];
+if 'GAZEBO_MODEL_PATH' in os.environ:
+  model_path_env = os.environ['GAZEBO_MODEL_PATH'].split(':');
+  models_paths = models_paths + model_path_env
+
 catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
-supported_sdf_versions = [1.4, 1.5]
+supported_sdf_versions = [1.4, 1.5, 1.6]
 
 
 
@@ -37,21 +41,22 @@ find_mesh_in_catkin_ws.cache = []
 
 def find_model_in_gazebo_dir(modelname):
   if not find_model_in_gazebo_dir.cache:
-    for root, dirs, files in os.walk(models_path, followlinks=True):
-      for currfile in files:
-        if currfile != 'model.sdf':
-          continue
-        filename_path = os.path.join(root, currfile)
-        tree = ET.parse(filename_path)
-        root = tree.getroot()
-        if root.tag != 'sdf':
-          continue
-        modelnode = get_node(root, 'model')
-        if modelnode == None:
-          continue
-        modelname_in_file = modelnode.attrib['name']
-        find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
-    #print(find_model_in_gazebo_dir.cache)
+    for models_path in models_paths:
+      for dirpath, dirs, files in os.walk(models_path, followlinks=True):
+        for currfile in files:
+          if not currfile.endswith('.sdf'):
+            continue
+          filename_path = os.path.join(dirpath, currfile)
+          tree = ET.parse(filename_path)
+          root = tree.getroot()
+          if root.tag != 'sdf':
+            continue
+          modelnode = get_node(root, 'model')
+          if modelnode == None:
+            continue
+          modelname_in_file = modelnode.attrib['name']
+          find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
+  #print(find_model_in_gazebo_dir.cache)
   return find_model_in_gazebo_dir.cache.get(modelname)
 find_model_in_gazebo_dir.cache = {}
 
@@ -92,7 +97,8 @@ def indent(string, spaces):
 
 def model_from_include(parent, include_node):
     submodel_uri = get_tag(include_node, 'uri')
-    submodel_path = submodel_uri.replace('model://', models_path) + os.path.sep + 'model.sdf'
+    submodel_uri = submodel_uri.replace('model://', '')
+    submodel_path = find_model_in_gazebo_dir(submodel_uri)
     submodel_name = get_tag(include_node, 'name')
     submodel_pose = get_tag_pose(include_node)
     return Model(parent, name=submodel_name, pose=submodel_pose, file=submodel_path)
@@ -134,11 +140,9 @@ class SDF(object):
 
 
   def from_model(self, modelname):
-    sdf_file = models_path + modelname + '/model.sdf'
-    if not os.path.exists(sdf_file):
-      sdf_file = find_model_in_gazebo_dir(modelname)
+    sdf_file = find_model_in_gazebo_dir(modelname)
     if not sdf_file:
-      print('Could not resolve modelname=%s to its SDF file in %s' % (modelname, models_path))
+      print('Could not resolve modelname=%s to its SDF file' % (modelname))
       return
     self.from_file(sdf_file)
 
