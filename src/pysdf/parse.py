@@ -25,21 +25,16 @@ catkin_ws_path_exists = os.path.exists(catkin_ws_path)
 while not catkin_ws_path_exists:
   print ('----------------------------------------------------------')
   print ('catkin workspace path ~/catkin_ws/src/ does not exist. ')
-  print ('Please provide the correct source directory.')
+  print ('Please change the catkin_ws_path variable inside pysdf/parse.py')
   print ('----------------------------------------------------------')
-  catkin_dir = raw_input('catkin path: ~/')
-  catkin_ws_path = os.path.expanduser('~') + '/' + catkin_dir
-  catkin_ws_path_exists = os.path.exists(catkin_ws_path)
-  print ('your input: ~/%s --> %s' % (catkin_dir,catkin_ws_path))
+  sys.exit(1)
 
 def sanitize_xml_input_name(text):
   ### removes whitespaces before and after the tag text
   return text.strip()
 
 def find_mesh_in_catkin_ws(filename):
-  print ('find path in catkin ws')
   if not find_mesh_in_catkin_ws.cache:
-    print ('%s' % filename)
     result = ''
     for root, dirs, files in os.walk(catkin_ws_path, followlinks=True):
       for currfile in files:
@@ -371,11 +366,11 @@ class Model(SpatialEntity):
       joint.tree_parent_link = self.get_link(joint.parent)
       if not joint.tree_parent_link:
         print('Failed to find parent %s of joint %s. Aborting' % (joint.parent, joint.name))
-        sys.exit(0)
+        sys.exit(1)
       joint.tree_child_link = self.get_link(joint.child)
       if not joint.tree_child_link:
         print('Failed to find child %s of joint %s. Aborting' % (joint.child, joint.name))
-        sys.exit(0)
+        sys.exit(1)
         return None
       joint.tree_parent_link.tree_child_joints.append(joint)
       joint.tree_child_link.tree_parent_joint = joint
