@@ -24,7 +24,7 @@ catkin_ws_path_exists = os.path.exists(catkin_ws_path)
 
 while not catkin_ws_path_exists:
   print ('----------------------------------------------------------')
-  print ('catkin workspace path ~/catkin_ws/src/ does not exist. ')
+  print ('%s does not exist.' % catkin_ws_path)
   print ('Please change the catkin_ws_path variable inside pysdf/parse.py')
   print ('----------------------------------------------------------')
   sys.exit(1)
