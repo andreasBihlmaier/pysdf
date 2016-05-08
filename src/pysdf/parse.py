@@ -22,7 +22,7 @@ supported_sdf_versions = [1.4, 1.5, 1.6]
 
 catkin_ws_path_exists = os.path.exists(catkin_ws_path)
 
-while not catkin_ws_path_exists:
+if not catkin_ws_path_exists:
   print ('----------------------------------------------------------')
   print ('%s does not exist.' % catkin_ws_path)
   print ('Please change the catkin_ws_path variable inside pysdf/parse.py')
