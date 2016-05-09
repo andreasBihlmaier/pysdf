@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import itertools
 import os
+import sys
 import xml.etree.ElementTree as ET
 import xml.dom.minidom
 
@@ -11,6 +12,7 @@ from naming import *
 from conversions import *
 
 models_paths = [os.path.expanduser('~/.gazebo/models/')];
+
 if 'GAZEBO_MODEL_PATH' in os.environ:
   model_path_env = os.environ['GAZEBO_MODEL_PATH'].split(':');
   models_paths = models_paths + model_path_env
@@ -18,7 +20,18 @@ if 'GAZEBO_MODEL_PATH' in os.environ:
 catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
 supported_sdf_versions = [1.4, 1.5, 1.6]
 
+catkin_ws_path_exists = os.path.exists(catkin_ws_path)
 
+if not catkin_ws_path_exists:
+  print ('----------------------------------------------------------')
+  print ('%s does not exist.' % catkin_ws_path)
+  print ('Please change the catkin_ws_path variable inside pysdf/parse.py')
+  print ('----------------------------------------------------------')
+  sys.exit(1)
+
+def sanitize_xml_input_name(text):
+  ### removes whitespaces before and after the tag text
+  return text.strip()
 
 def find_mesh_in_catkin_ws(filename):
   if not find_mesh_in_catkin_ws.cache:
@@ -36,6 +49,7 @@ def find_mesh_in_catkin_ws(filename):
           find_mesh_in_catkin_ws.cache.append(filename_path)
   matching = [path for path in find_mesh_in_catkin_ws.cache if filename in path]
   return ' OR '.join(matching)
+
 find_mesh_in_catkin_ws.cache = []
 
 
@@ -69,14 +83,12 @@ def pose2origin(node, pose):
 def prettyXML(uglyXML):
   return xml.dom.minidom.parseString(uglyXML).toprettyxml(indent='  ')
 
-
 def get_tag(node, tagname, default = None):
   tag = node.findall(tagname)
   if tag:
-    return tag[0].text
+    return sanitize_xml_input_name(tag[0].text)
   else:
     return default
-
 
 def get_node(node, tagname, default = None):
   tag = node.findall(tagname)
@@ -182,7 +194,6 @@ class World(object):
 
 
   def get_link(self, requested_linkname):
-    #print('World.get_link: rl=%s' % requested_linkname)
     for model in self.models:
       link = model.get_link(requested_linkname, model.name)
       if link:
@@ -339,9 +350,8 @@ class Model(SpatialEntity):
       if res:
         return res
 
-
   def get_link(self, requested_linkname, prefix = ''):
-    #print('Model.get_link: n=%s rl=%s p=%s' % (self.name, requested_linkname, prefix))
+    requested_linkname = sanitize_xml_input_name(requested_linkname)
     full_prefix = prefix + '::' if prefix else ''
     for link in self.links:
       if full_prefix + link.name == requested_linkname:
@@ -351,15 +361,16 @@ class Model(SpatialEntity):
       if res:
         return res
 
-
   def build_tree(self):
     for joint in self.joints:
       joint.tree_parent_link = self.get_link(joint.parent)
       if not joint.tree_parent_link:
         print('Failed to find parent %s of joint %s. Aborting' % (joint.parent, joint.name))
+        sys.exit(1)
       joint.tree_child_link = self.get_link(joint.child)
       if not joint.tree_child_link:
         print('Failed to find child %s of joint %s. Aborting' % (joint.child, joint.name))
+        sys.exit(1)
         return None
       joint.tree_parent_link.tree_child_joints.append(joint)
       joint.tree_child_link.tree_parent_joint = joint
