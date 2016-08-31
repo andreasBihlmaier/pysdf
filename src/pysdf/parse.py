@@ -4,6 +4,7 @@ import itertools
 import os
 import sys
 import xml.etree.ElementTree as ET
+from xml.etree.ElementTree import ParseError
 import xml.dom.minidom
 
 from tf.transformations import *
@@ -61,7 +62,12 @@ def find_model_in_gazebo_dir(modelname):
           if not currfile.endswith('.sdf'):
             continue
           filename_path = os.path.join(dirpath, currfile)
-          tree = ET.parse(filename_path)
+          try:
+            tree = ET.parse(filename_path)
+          except ParseError, e:
+              print("Error parsing SDF file %s" % filename_path)
+              print(e)
+              continue
           root = tree.getroot()
           if root.tag != 'sdf':
             continue
