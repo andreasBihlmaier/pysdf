@@ -11,6 +11,7 @@ def main():
   parser.add_argument('sdf', help='SDF file to convert')
   parser.add_argument('urdf', help='Resulting URDF file to be written')
   parser.add_argument('-p', '--plot', nargs=1, help='Plot SDF to file')
+  parser.add_argument('--no-prefix', action='store_true', help='Do not use model name as name prefix')
   args = parser.parse_args()
 
   sdf = pysdf.SDF(file=args.sdf)
@@ -23,7 +24,7 @@ def main():
 
   model = world.models[0]
   print(model)
-  model.save_urdf(args.urdf)
+  model.save_urdf(args.urdf, prefix=None if args.no_prefix else '')
 
 
 if __name__ == '__main__':

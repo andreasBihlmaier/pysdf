@@ -184,19 +184,19 @@ class World(object):
     self.models += [Model(tree=model_node, version=self.version) for model_node in node.findall('model')]
 
 
-  def plot_to_file(self, plot_filename):
+  def plot_to_file(self, plot_filename, prefix=''):
     import pygraphviz as pgv
     graph = pgv.AGraph(directed=True)
-    self.plot(graph)
+    self.plot(graph, prefix)
     graph.draw(plot_filename, prog='dot')
 
 
-  def plot(self, graph):
+  def plot(self, graph, prefix=''):
     graph.add_node('world')
 
     for model in self.models:
-      model.plot(graph)
-      graph.add_edge('world', model.name + '::' + model.root_link.name)
+      model.plot(graph, prefix)
+      graph.add_edge('world', model.name + '::' + model.root_link.name if prefix is not None else model.root_link.name)
 
 
   def get_link(self, requested_linkname):
@@ -325,22 +325,26 @@ class Model(SpatialEntity):
 
 
   def add_urdf_elements(self, node, prefix = ''):
-    full_prefix = prefix + '::' + self.name if prefix else self.name
+    if prefix is not None:
+      full_prefix = prefix + '::' + self.name if prefix else self.name
+    else:
+      full_prefix = ''
+
     for entity in self.joints + self.links:
       entity.add_urdf_elements(node, full_prefix)
     for submodel in self.submodels:
       submodel.add_urdf_elements(node, full_prefix)
 
 
-  def to_urdf_string(self):
+  def to_urdf_string(self, prefix=''):
     urdfnode = ET.Element('robot', {'name': self.name})
-    self.add_urdf_elements(urdfnode)
+    self.add_urdf_elements(urdfnode, prefix=prefix)
     return ET.tostring(urdfnode)
 
 
-  def save_urdf(self, filename):
+  def save_urdf(self, filename, prefix=''):
     urdf_file = open(filename, 'w')
-    pretty_urdf_string = prettyXML(self.to_urdf_string())
+    pretty_urdf_string = prettyXML(self.to_urdf_string(prefix))
     urdf_file.write(pretty_urdf_string)
     urdf_file.close()
 
@@ -424,8 +428,12 @@ class Model(SpatialEntity):
 
 
   def plot(self, graph, prefix = ''):
-    full_prefix = prefix + '::' + self.name if prefix else self.name
-    full_prefix += '::'
+    if prefix is not None:
+      full_prefix = prefix + '::' + self.name if prefix else self.name
+      full_prefix += '::'
+    else:
+      full_prefix = ''
+
     for link in self.links:
       graph.add_node(full_prefix + link.name, label=full_prefix + link.name + '\\nrel: ' + homogeneous2tq_string_rounded(link.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(link.pose_world))
     subgraph = graph.add_subgraph([full_prefix + link.name for link in self.links], 'cluster_' + self.name, color='gray', label=self.name + '\\nrel: ' + homogeneous2tq_string_rounded(self.pose) + '\\nabs: ' + homogeneous2tq_string_rounded(self.pose_world))
@@ -486,8 +494,8 @@ class Link(SpatialEntity):
     self.parent_model = parent_model
     self.gravity = True
     self.inertial = Inertial()
-    self.collision = Collision()
-    self.visual = Visual()
+    self.collisions = []
+    self.visuals = []
     self.tree_parent_joint = None
     self.tree_child_joints = []
     if 'tree' in kwargs:
@@ -498,9 +506,13 @@ class Link(SpatialEntity):
     return ''.join((
       'Link(\n',
       '  %s\n' % indent(super(Link, self).__repr__(), 2),
-      '  %s\n' % indent(str(self.inertial), 2),
-      '  collision: %s\n' % self.collision,
-      '  visual: %s\n' % self.visual,
+      '  inertial: %s\n' % indent(str(self.inertial), 2),
+      '  collisions: [\n',
+      '    %s\n' % indent('\n'.join([str(collision) for collision in self.collisions]), 4),
+      '  ]\n',
+      '  visuals: [\n',
+      '    %s\n' % indent('\n'.join([str(visual) for visual in self.visuals]), 4),
+      '  ]\n',
       ')'
     ))
 
@@ -513,11 +525,11 @@ class Link(SpatialEntity):
       return
     super(Link, self).from_tree(node)
     self.inertial = Inertial(tree=get_node(node, 'inertial'))
-    self.collision = Collision(tree=get_node(node, 'collision'))
-    self.visual = Visual(tree=get_node(node, 'visual'))
+    self.collisions = [Collision(tree=collision_node) for collision_node in node.iter('collision')]
+    self.visuals = [Visual(tree=visual_node) for visual_node in node.iter('visual')]
 
   def is_empty(self):
-    return not self.visual.geometry_type and not self.collision.geometry_type
+    return len(self.visuals) == 0 and len(self.collisions) == 0
 
   def add_urdf_elements(self, node, prefix):
     full_prefix = prefix + '::' if prefix else ''
@@ -531,8 +543,10 @@ class Link(SpatialEntity):
     else: # root
       urdf_pose = self.pose_world
     self.inertial.add_urdf_elements(linknode, urdf_pose)
-    self.collision.add_urdf_elements(linknode, prefix, urdf_pose)
-    self.visual.add_urdf_elements(linknode, prefix, urdf_pose)
+    for collision in self.collisions:
+      collision.add_urdf_elements(linknode, prefix, urdf_pose)
+    for visual in self.visuals:
+      visual.add_urdf_elements(linknode, prefix, urdf_pose)
 
 
   def get_full_name(self):
@@ -785,7 +799,7 @@ class LinkPart(SpatialEntity):
   def add_urdf_elements(self, node, prefix, link_pose, part_type):
     if not self.geometry_type:
       return
-    partnode = ET.SubElement(node, part_type, {'name': sdf2tfname(prefix + '::' + self.name)})
+    partnode = ET.SubElement(node, part_type, {'name': sdf2tfname(prefix + '::' + self.name if prefix else self.name)})
     pose2origin(partnode, concatenate_matrices(link_pose, self.pose))
     geometrynode = ET.SubElement(partnode, 'geometry')
     if self.geometry_type == 'box':
