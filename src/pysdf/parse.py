@@ -55,9 +55,13 @@ find_mesh_in_catkin_ws.cache = []
 
 
 def find_model_in_gazebo_dir(modelname):
+  canonical_sdf_name = 'model.sdf'
   if not find_model_in_gazebo_dir.cache:
     for models_path in models_paths:
       for dirpath, dirs, files in os.walk(models_path, followlinks=True):
+        if canonical_sdf_name in files:
+          files.remove(canonical_sdf_name)
+          files = [canonical_sdf_name] + files
         for currfile in files:
           if not currfile.endswith('.sdf'):
             continue
@@ -75,7 +79,8 @@ def find_model_in_gazebo_dir(modelname):
           if modelnode == None:
             continue
           modelname_in_file = modelnode.attrib['name']
-          find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
+          if modelname_in_file not in find_model_in_gazebo_dir.cache:
+            find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
   #print(find_model_in_gazebo_dir.cache)
   return find_model_in_gazebo_dir.cache.get(modelname)
 find_model_in_gazebo_dir.cache = {}
