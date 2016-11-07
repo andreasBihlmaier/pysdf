@@ -18,15 +18,20 @@ if 'GAZEBO_MODEL_PATH' in os.environ:
   model_path_env = os.environ['GAZEBO_MODEL_PATH'].split(':');
   models_paths = models_paths + model_path_env
 
-catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
+mesh_path_env_name='MESH_WORKSPACE_PATH'
+if mesh_path_env_name in os.environ:
+  catkin_ws_path = os.environ[mesh_path_env_name]
+else:
+  catkin_ws_path = os.path.expanduser('~') + '/catkin_ws/src/'
 supported_sdf_versions = [1.4, 1.5, 1.6]
 
 catkin_ws_path_exists = os.path.exists(catkin_ws_path)
 
 if not catkin_ws_path_exists:
   print ('----------------------------------------------------------')
-  print ('%s does not exist.' % catkin_ws_path)
-  print ('Please change the catkin_ws_path variable inside pysdf/parse.py')
+  print ('Path (%s) does not exist.' % catkin_ws_path)
+  print ('Please either set/change %s, or change ' % mesh_path_env_name)
+  print ('the catkin_ws_path variable inside pysdf/parse.py')
   print ('----------------------------------------------------------')
   sys.exit(1)
 
