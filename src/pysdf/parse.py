@@ -6,6 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ParseError
 import xml.dom.minidom
+import glob
 
 from tf.transformations import *
 
@@ -52,7 +53,9 @@ def find_mesh_in_catkin_ws(filename):
               break
           catkin_stack_path = partial_path.replace(path_part + '/', '')
           filename_path = os.path.join(root, currfile).replace(catkin_stack_path, '')
+          #print('Adding %s to mesh cache (catkin_stack_path=%s)' % (filename_path, catkin_stack_path))
           find_mesh_in_catkin_ws.cache.append(filename_path)
+    #print(find_mesh_in_catkin_ws.cache)
   matching = [path for path in find_mesh_in_catkin_ws.cache if filename in path]
   return ' OR '.join(matching)
 
@@ -74,8 +77,7 @@ def find_model_in_gazebo_dir(modelname):
           try:
             tree = ET.parse(filename_path)
           except ParseError, e:
-              print("Error parsing SDF file %s" % filename_path)
-              print(e)
+              print("Error parsing SDF file %s (%s). Ignoring model and continuing." % (filename_path, e))
               continue
           root = tree.getroot()
           if root.tag != 'sdf':
@@ -85,9 +87,17 @@ def find_model_in_gazebo_dir(modelname):
             continue
           modelname_in_file = modelnode.attrib['name']
           if modelname_in_file not in find_model_in_gazebo_dir.cache:
+            #print('Adding (name=%s, path=%s) to model cache' % (modelname_in_file, filename_path))
             find_model_in_gazebo_dir.cache[modelname_in_file] = filename_path
-  #print(find_model_in_gazebo_dir.cache)
-  return find_model_in_gazebo_dir.cache.get(modelname)
+    #print(find_model_in_gazebo_dir.cache)
+  if '/' in modelname:  # path-based
+    for models_path in models_paths + ['.']:
+      modelfile_paths = glob.glob(os.path.join(models_path, modelname, '*.sdf'))
+      for modelfile_path in modelfile_paths:
+        if os.path.exists(modelfile_path):
+          return modelfile_path
+  else:  # name-based
+    return find_model_in_gazebo_dir.cache.get(modelname)
 find_model_in_gazebo_dir.cache = {}
 
 
@@ -581,6 +591,7 @@ class Joint(SpatialEntity):
     super(Joint, self).__init__(**kwargs)
     self.parent_model = parent_model
     self.type = ''
+    self.urdf_type = ''
     self.parent = ''
     self.child = ''
     self.axis = Axis(self)
@@ -596,6 +607,7 @@ class Joint(SpatialEntity):
       'Joint(\n',
       '  %s\n' % indent(super(Joint, self).__repr__(), 2),
       '  type: %s\n' % self.type,
+      '  urdf_type: %s\n' % self.urdf_type,
       '  parent: %s\n' % self.parent,
       '  child: %s\n' % self.child,
       '  axis: %s\n' % self.axis,
@@ -612,6 +624,7 @@ class Joint(SpatialEntity):
       return
     super(Joint, self).from_tree(node)
     self.type = node.attrib['type']
+    self.urdf_type = self.type
     self.parent = get_tag(node, 'parent', '')
     self.child = get_tag(node, 'child', '')
     self.axis = Axis(self, tree=get_node(node, 'axis'))
@@ -631,10 +644,12 @@ class Joint(SpatialEntity):
     else: # joint crosses includes
       pose2origin(jointnode, concatenate_matrices(inverse_matrix(parent_pose_world), self.tree_child_link.pose_world))
     if self.type == 'revolute' and self.axis.lower_limit == 0 and self.axis.upper_limit == 0:
-      jointnode.attrib['type'] = 'fixed'
+      self.urdf_type = 'fixed'
+      jointnode.attrib['type'] = self.urdf_type
     elif self.type == 'universal':
       # Simulate universal robot as
       # self.parent -> revolute joint (self) -> dummy link -> revolute joint -> self.child
+      self.urdf_type = 'revolute-hack'
       jointnode.attrib['type'] = 'revolute'
       dummylinknode = ET.SubElement(node, 'link', {'name': sdf2tfname(full_prefix + self.name + '::revolute_dummy_link')})
       childnode.attrib['link'] = dummylinknode.attrib['name']
@@ -697,7 +712,13 @@ class Axis(object):
     if (self.version <= 1.4) or (self.version >= 1.5 and self.use_parent_model_frame): # SDF 1.4 axis is specified in model frame
       rotation_modelCBTjoint = rotation_only(modelCBTjoint)
       xyz_joint = homogeneous_times_vector(rotation_modelCBTjoint, self.xyz)
-      xyz_joint /= numpy.linalg.norm(xyz_joint)
+      xyz_norm = numpy.linalg.norm(xyz_joint)
+      if xyz_norm != 0.0:
+        xyz_joint /= xyz_norm
+      elif self.joint.urdf_type == 'fixed':
+        pass
+      else:
+        print('Error calculating axis of joint %s for given xyz=%s' % (self.joint.name, xyz_joint))
       #print('self.xyz=%s\nmodelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
     else: # SDF 1.5 axis is specified in joint frame unless the use_parent_model_frame flag is set to true
       print('UNTESTED')
