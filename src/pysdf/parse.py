@@ -122,6 +122,9 @@ def model_from_include(parent, include_node):
     submodel_uri = get_tag(include_node, 'uri')
     submodel_uri = submodel_uri.replace('model://', '')
     submodel_path = find_model_in_gazebo_dir(submodel_uri)
+    if not submodel_path:
+      print('Failed to find included model (URI: %s)' % submodel_uri)
+      return
     submodel_name = get_tag(include_node, 'name')
     submodel_pose = get_tag_pose(include_node)
     return Model(parent, name=submodel_name, pose=submodel_pose, file=submodel_path)
@@ -184,7 +187,11 @@ class World(object):
     if node.findall('world'):
       node = node.findall('world')[0]
       for include_node in node.iter('include'):
-        self.models.append(model_from_include(None, include_node))
+        included_model = model_from_include(None, include_node)
+        if not included_model:
+          print('Failed to include model, see previous errors. Aborting.')
+          sys.exit(1)
+        self.models.append(included_model)
       # TODO lights
     self.models += [Model(tree=model_node, version=self.version) for model_node in node.findall('model')]
 
@@ -326,7 +333,11 @@ class Model(SpatialEntity):
     self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
 
     for include_node in node.iter('include'):
-      self.submodels.append(model_from_include(self, include_node))
+      included_submodel = model_from_include(self, include_node)
+      if not included_submodel:
+        print('Failed to include model, see previous errors. Aborting.')
+        sys.exit(1)
+      self.submodels.append(included_submodel)
 
 
   def add_urdf_elements(self, node, prefix = ''):
