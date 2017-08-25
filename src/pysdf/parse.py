@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import division
 from __future__ import print_function
 
 import itertools
@@ -10,8 +12,8 @@ import glob
 
 from tf.transformations import *
 
-from naming import *
-from conversions import *
+from .naming import *
+from .conversions import *
 
 models_paths = [os.path.expanduser('~/.gazebo/models/')];
 
@@ -76,7 +78,7 @@ def find_model_in_gazebo_dir(modelname):
           filename_path = os.path.join(dirpath, currfile)
           try:
             tree = ET.parse(filename_path)
-          except ParseError, e:
+          except ParseError as e:
               print("Error parsing SDF file %s (%s). Ignoring model and continuing." % (filename_path, e))
               continue
           root = tree.getroot()
