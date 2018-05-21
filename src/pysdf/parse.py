@@ -13,10 +13,10 @@ from tf.transformations import *
 from naming import *
 from conversions import *
 
-models_paths = [os.path.expanduser('~/.gazebo/models/')];
+models_paths = [os.path.expanduser('~/.gazebo/models/')]
 
 if 'GAZEBO_MODEL_PATH' in os.environ:
-  model_path_env = os.environ['GAZEBO_MODEL_PATH'].split(':');
+  model_path_env = os.environ['GAZEBO_MODEL_PATH'].split(':')
   models_paths = models_paths + model_path_env
 
 mesh_path_env_name='MESH_WORKSPACE_PATH'
@@ -76,7 +76,7 @@ def find_model_in_gazebo_dir(modelname):
           filename_path = os.path.join(dirpath, currfile)
           try:
             tree = ET.parse(filename_path)
-          except ParseError, e:
+          except ParseError as e:
               print("Error parsing SDF file %s (%s). Ignoring model and continuing." % (filename_path, e))
               continue
           root = tree.getroot()
