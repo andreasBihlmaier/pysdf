@@ -201,7 +201,7 @@ class World(object):
     self.version = kwargs.get('version', self.version)
     if node.findall('world'):
       node = node.findall('world')[0]
-      for include_node in node.iter('include'):
+      for include_node in node.findall('include'):
         included_model = model_from_include(None, include_node)
         if not included_model:
           print('Failed to include model, see previous errors. Aborting.')
@@ -344,10 +344,10 @@ class Model(SpatialEntity):
       return
     self.version = kwargs.get('version', self.version)
     super(Model, self).from_tree(node, **kwargs)
-    self.links = [Link(self, tree=link_node) for link_node in node.iter('link')]
-    self.joints = [Joint(self, tree=joint_node) for joint_node in node.iter('joint')]
+    self.links = [Link(self, tree=link_node) for link_node in node.findall('link')]
+    self.joints = [Joint(self, tree=joint_node) for joint_node in node.findall('joint')]
 
-    for include_node in node.iter('include'):
+    for include_node in node.findall('include'):
       included_submodel = model_from_include(self, include_node)
       if not included_submodel:
         print('Failed to include model, see previous errors. Aborting.')
@@ -556,8 +556,8 @@ class Link(SpatialEntity):
       return
     super(Link, self).from_tree(node)
     self.inertial = Inertial(tree=get_node(node, 'inertial'))
-    self.collisions = [Collision(tree=collision_node) for collision_node in node.iter('collision')]
-    self.visuals = [Visual(tree=visual_node) for visual_node in node.iter('visual')]
+    self.collisions = [Collision(tree=collision_node) for collision_node in node.findall('collision')]
+    self.visuals = [Visual(tree=visual_node) for visual_node in node.findall('visual')]
 
   def is_empty(self):
     return len(self.visuals) == 0 and len(self.collisions) == 0
