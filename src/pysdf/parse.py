@@ -721,7 +721,6 @@ class Axis(object):
         print('Error calculating axis of joint %s for given xyz=%s' % (self.joint.name, xyz_joint))
       #print('self.xyz=%s\nmodelCBTjoint:\n%s\nrotation_modelCBT_joint:\n%s\nxyz_joint=%s' % (self.xyz, modelCBTjoint, rotation_modelCBTjoint, xyz_joint))
     else: # SDF 1.5 axis is specified in joint frame unless the use_parent_model_frame flag is set to true
-      print('UNTESTED')
       xyz_joint = self.xyz
     axisnode = ET.SubElement(node, 'axis', {'xyz': array2string(rounded(xyz_joint))})
     limitnode = ET.SubElement(node, 'limit', {'lower': str(self.lower_limit), 'upper': str(self.upper_limit), 'effort': str(self.effort_limit), 'velocity': str(self.velocity_limit)})
