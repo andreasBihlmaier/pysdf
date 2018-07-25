@@ -760,7 +760,7 @@ class Inertial(object):
   def add_urdf_elements(self, node, link_pose):
     inertialnode = ET.SubElement(node, 'inertial')
     massnode = ET.SubElement(inertialnode, 'mass', {'value': str(self.mass)})
-    pose2origin(inertialnode, concatenate_matrices(link_pose, self.pose))
+    pose2origin(inertialnode, self.pose)  # inertial reference frame is relative to the link reference frame in URDF and SDF
     self.inertia.add_urdf_elements(inertialnode)
 
 
