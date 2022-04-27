@@ -10,8 +10,8 @@ import glob
 
 from tf.transformations import *
 
-from naming import *
-from conversions import *
+from pysdf.naming import *
+from pysdf.conversions import *
 
 models_paths = [os.path.expanduser('~/.gazebo/models/')]
 
