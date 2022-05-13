@@ -112,9 +112,10 @@ def prettyXML(uglyXML):
 def get_tag(node, tagname, default = None):
   tag = node.findall(tagname)
   if tag:
-    return sanitize_xml_input_name(tag[0].text)
-  else:
-    return default
+      text = tag[0].text
+      if text:
+        return sanitize_xml_input_name(tag[0].text)
+  return default
 
 def get_node(node, tagname, default = None):
   tag = node.findall(tagname)
@@ -127,6 +128,18 @@ def get_node(node, tagname, default = None):
 def get_tag_pose(node):
   pose = get_tag(node, 'pose', '0 0 0  0 0 0')
   return pose_string2homogeneous(pose)
+
+
+def parse_bool(text):
+  val = {
+    'false': False,
+    '0': False,
+    'true': True,
+    '1': True,
+  }.get(text)
+  if val is None:
+    raise Exception("Unable to parse xsd:boolean. Expected 0, false, 1 or true, got: " + str(text))
+  return val
 
 
 def indent(string, spaces):
@@ -697,7 +710,7 @@ class Axis(object):
       print('Invalid node of type %s instead of axis(2). Aborting.' % node.tag)
       return
     self.xyz = numpy.array(get_tag(node, 'xyz').split())
-    self.use_parent_model_frame = bool(get_tag(node, 'use_parent_model_frame'))
+    self.use_parent_model_frame = parse_bool(get_tag(node, 'use_parent_model_frame'))
     limitnode = get_node(node, 'limit')
     if limitnode == None:
       print('limit Tag missing from joint. Aborting.')
