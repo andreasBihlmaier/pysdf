@@ -8,7 +8,7 @@ from xml.etree.ElementTree import ParseError
 import xml.dom.minidom
 import glob
 
-from tf.transformations import *
+from tf_transformations import *
 
 from pysdf.naming import *
 from pysdf.conversions import *
