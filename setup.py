@@ -17,7 +17,7 @@ setup(
   maintainer='Andreas Bihlmaier',
   maintainer_email='andreas.bihlmaier@gmx.de',
   description='Python library to parse SDF into class hierarchy and export URDF',
-  license='MIT',
+  license='Apache-2.0',
   tests_require=['pytest'],
   entry_points={
     'console_scripts': [

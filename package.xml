@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Python library to parse SDF into class hierarchy and export URDF</description>
   <maintainer email="andreas.bihlmaier@gmx.de">Andreas Bihlmaier</maintainer>
-  <license>MIT</license>
+  <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
