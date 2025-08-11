@@ -148,8 +148,13 @@ def indent(string, spaces):
 
 def model_from_include(parent, include_node):
     submodel_uri = get_tag(include_node, 'uri')
-    submodel_uri = submodel_uri.replace('model://', '')
-    submodel_path = find_model_in_gazebo_dir(submodel_uri)
+    # check if submodel_uri has model on it or file
+    if submodel_uri[:5] == 'model':
+        submodel_uri = submodel_uri.replace('model://', '')
+        submodel_path = find_model_in_gazebo_dir(submodel_uri)
+    elif submodel_uri[:4] == 'file':
+        submodel_uri = submodel_uri.replace('file://', '')
+        submodel_path = find_model_in_gazebo_dir(submodel_uri)
     if not submodel_path:
       print('Failed to find included model (URI: %s)' % submodel_uri)
       return
