@@ -138,7 +138,7 @@ def parse_bool(text):
     '1': True,
   }.get(text)
   if val is None:
-    raise Exception("Unable to parse xsd:boolean. Expected 0, false, 1 or true, got: " + str(text))
+    raise ValueError("Unable to parse xsd:boolean. Expected 0, false, 1 or true, got: " + str(text))
   return val
 
 
@@ -710,7 +710,7 @@ class Axis(object):
       print('Invalid node of type %s instead of axis(2). Aborting.' % node.tag)
       return
     self.xyz = numpy.array(get_tag(node, 'xyz').split())
-    self.use_parent_model_frame = parse_bool(get_tag(node, 'use_parent_model_frame'))
+    self.use_parent_model_frame = parse_bool(get_tag(node, 'use_parent_model_frame', 'false'))
     limitnode = get_node(node, 'limit')
     if limitnode == None:
       print('limit Tag missing from joint. Aborting.')
